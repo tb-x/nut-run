@@ -1,0 +1,1844 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#2d5c41">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Nut Run</title>
+<style>
+/* Layout: full-screen pixel-art canvas (tap to move); score pills top-centre (you left, grey right), home top-left, restart top-right; start and end cards centred */
+:root{
+  --ink:#2b1a10; --cream:#fff4dc; --green:#5aa040; --green-dark:#3b7a2a; --rust:#c96b33; --grey:#6b717d; --gold:#ffd84a;
+  --ui:Verdana,Tahoma,sans-serif;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:#2d5c41;overscroll-behavior:none;font-family:var(--ui);
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#game{position:fixed;left:0;top:0;display:block;image-rendering:pixelated;touch-action:none}
+
+/* ---------- corner buttons ---------- */
+#home,#restart,#mute{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));z-index:50;width:44px;height:44px;border-radius:50%;
+  display:grid;place-items:center;color:var(--ink);background:rgba(255,255,255,.82);border:0;padding:0;
+  box-shadow:0 3px 0 rgba(0,0,0,.18);touch-action:manipulation;-webkit-tap-highlight-color:transparent;text-decoration:none;cursor:pointer}
+#home{left:calc(10px + env(safe-area-inset-left,0px))}
+#restart{right:calc(10px + env(safe-area-inset-right,0px))}
+#mute{right:calc(62px + env(safe-area-inset-right,0px))}
+#mute .x{display:none} #mute.off .x{display:inline} #mute.off .w{display:none}
+#home svg,#restart svg,#mute svg{width:24px;height:24px}
+#home:active,#restart:active,#mute:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.18)}
+
+/* ---------- score ---------- */
+#score{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:40;
+  display:flex;gap:10px;pointer-events:none}
+.pill{display:flex;align-items:center;gap:2px;height:44px;padding:0 10px 0 4px;border-radius:22px;background:rgba(255,244,220,.88);
+  box-shadow:0 3px 0 rgba(0,0,0,.18);font-weight:bold;font-size:24px;color:var(--ink);min-width:66px;justify-content:center}
+.pill.ai{padding:0 4px 0 10px;color:var(--grey)}
+.pill canvas{width:46px;height:46px;image-rendering:pixelated}
+.pill.zoom{box-shadow:0 0 0 3px var(--gold),0 3px 0 rgba(0,0,0,.18)}
+.pop{animation:pop .4s ease-out}
+@keyframes pop{40%{transform:scale(1.35)}}
+
+/* ---------- start, countdown and end ---------- */
+.overlay{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(20,40,28,.4)}
+.overlay[hidden]{display:none}
+.card{background:var(--cream);border-radius:22px;padding:14px 22px 18px;box-shadow:0 6px 0 rgba(0,0,0,.25);text-align:center;
+  max-width:min(92vw,600px);max-height:92vh;overflow:auto;box-sizing:border-box;animation:pop .5s ease-out}
+.card h1{margin:0 0 6px;font-size:clamp(26px,7vmin,46px);color:var(--rust);letter-spacing:1px}
+.versus{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:bold;font-size:26px;color:var(--ink)}
+.versus canvas{width:clamp(80px,22vmin,136px);height:clamp(80px,22vmin,136px);image-rendering:pixelated}
+#levels{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px;max-width:200px;margin-inline:auto}
+#levels button{width:44px;height:44px;border-radius:50%;border:0;font:bold 20px var(--ui);color:var(--ink);background:#e8d6b0;
+  box-shadow:0 3px 0 rgba(0,0,0,.2);touch-action:manipulation;cursor:pointer}
+#levels button.on{background:var(--gold)}
+#levels button:disabled{opacity:.35;cursor:default}
+@media (max-height:460px){#levels{max-width:none}}   /* short, wide screens: one row of levels */
+.row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:1px;margin:4px 0;padding:2px 6px;border-radius:14px}
+.row canvas.who{width:clamp(48px,12vmin,68px);height:clamp(48px,12vmin,68px);image-rendering:pixelated}
+.row img{width:clamp(22px,5.5vmin,32px);height:clamp(22px,5.5vmin,32px);image-rendering:pixelated}
+.row b{font-size:clamp(22px,6vmin,32px);margin:0 8px 0 2px;color:var(--ink)}
+.row.win{background:rgba(255,216,74,.4)}
+.buttons{display:flex;justify-content:center;gap:16px;margin-top:10px}
+.go{width:92px;height:92px;border-radius:50%;border:0;background:var(--green);color:#fff;
+  box-shadow:0 5px 0 var(--green-dark);touch-action:manipulation;cursor:pointer;display:inline-grid;place-items:center}
+.go.small{width:70px;height:70px;background:#e8d6b0;color:var(--ink);box-shadow:0 5px 0 #b9a47c}
+.go svg{width:52%;height:52%}
+.go:active{transform:translateY(3px);box-shadow:0 2px 0 var(--green-dark)}
+.go[hidden]{display:none}
+.credit{margin:8px 0 0;font-size:11px;color:#8a7a60}
+#count{position:fixed;inset:0;z-index:55;display:grid;place-items:center;pointer-events:none;
+  font-size:clamp(70px,26vmin,170px);font-weight:bold;color:#fff6a0;text-shadow:0 6px 0 var(--ink),0 0 20px rgba(0,0,0,.4)}
+#count[hidden]{display:none}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<a id="home" href="../index.html" aria-label="All games" title="All games"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9.8V20h12V9.8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><path d="M10 20v-5.5h4V20" fill="currentColor"/></svg></a>
+<button id="mute" aria-label="Sound off" title="Sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="w" d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path class="x" d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+<button id="restart" aria-label="Start again" title="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M19.5 3.5v5h-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<div id="score">
+  <div class="pill you" id="pillYou"><canvas class="face" data-who="you" width="68" height="68"></canvas><span id="nYou">0</span></div>
+  <div class="pill ai" id="pillAi"><span id="nAi">0</span><canvas class="face" data-who="ai" data-flip="1" width="68" height="68"></canvas></div>
+</div>
+<div id="start" class="overlay">
+  <div class="card">
+    <h1 id="startTitle">Level 1</h1>
+    <div class="versus"><canvas class="face" data-who="you" width="68" height="68"></canvas> vs <canvas class="face" data-who="ai" data-flip="1" width="68" height="68"></canvas></div>
+    <div class="buttons"><button class="go" id="play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5v15l12-7.5z" fill="currentColor"/></svg></button></div>
+    <div id="levels"></div>
+  </div>
+</div>
+<div id="count" hidden></div>
+<div id="end" class="overlay" hidden>
+  <div class="card">
+    <h1 id="endTitle">You win!</h1>
+    <div class="row" id="rowYou"></div>
+    <div class="row" id="rowAi"></div>
+    <div class="buttons">
+      <button class="go small" id="again" aria-label="Play this level again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M19.5 3.5v5h-5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="go" id="next" aria-label="Next level"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h12M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <p class="credit">Voices: elevenlabs.io · Music: Eleven Music</p>
+  </div>
+</div>
+<script>
+'use strict';
+/* ======== tuning knobs ======== */
+const VIEW_MIN = 320;          // logical pixels across the shorter side of the screen (bigger = smaller pixels)
+const VIEW_MIN_W = 300;        // at least this many logical pixels across in portrait
+const WALK = 150;              // squirrel run speed, px/s
+const CLIMB = 120;             // trunk climbing speed, px/s
+const JUMP_DX = 124;           // longest sideways leap between branches, px
+const JUMP_UP = 96;            // highest leap up onto a branch, px
+const BOUNCE_UP = 300;         // how high a bouncy mushroom throws a squirrel
+const ZOOM = 1.6, ZOOM_TIME = 5;   // berries: speed boost and how long it lasts (s)
+const AI_AHEAD_SLOW = 2;       // when grey is ahead, it pauses this many times longer (lets you catch up)
+const AI_EASE = 0.9;           // grey's speed on every level is multiplied by this, and its pauses divided by it (lower = easier)
+const PICK_DIST = 26;          // how close a squirrel must get to grab a nut
+const TAP_NUT = 40;            // a tap this close to a nut goes straight for it
+const VOICE_VOL = 0.9;         // spoken lines (each clip is first evened out to the same level)
+const SFX_VOL = 0.45;          // synthesized effects
+const MUSIC_VOL = 0.24;        // background music (an Eleven Music track per season)
+const MUSIC_DUCK = 0.22;       // music level (fraction) while the voice is talking, so the words come through
+const MUSIC_XFADE = 2;         // seconds of each track's end blended into its start, so the loop has no seam
+const MUSIC_ZOOM = 1.08;       // the music plays this much faster while you have the speed boost
+const CHIP_VOL = 0.2;          // the synthesized chiptune, used only if a track can't load
+const MUSIC_BPM = 116;         // chiptune tempo on level 1; each level adds MUSIC_BPM_STEP
+const MUSIC_BPM_STEP = 4;
+const ASSET_V = 20;             // bump after changing anything in assets/
+const SUN_TOP = 30;            // the sun or moon stays at least this far below the top of the screen (under the buttons)
+const BG_GREY = 0.35;          // how much colour the background strips lose, so the trees you play on stand out
+const BG_HAZE = 0.1;           // extra horizon-colour haze on every background strip
+const CANOPY_SPREAD = 0.3;     // the two back copies of a crown sit this far (in crown widths) to each side
+const CANOPY_DROP = 0.42;      // ... and this far (in crown heights) lower
+const CANOPY_SHADE = 0.32;     // ... darkened this much, so they read as the back of the tree
+const BUNCH_GAP = 30;          // pixels between the small leaf bunches hanging under a branch
+const TIP_SHARE = 90;          // branch tips of two trees closer than this get one leaf cluster between them instead of a mirrored pair
+
+/* ======== nuts ======== */
+const NUT_TYPES = {
+  acorn:   {pts: 1},
+  walnut:  {pts: 2},
+  golden:  {pts: 3},
+  berries: {pts: 0, zoom: true},   // a speed boost instead of points
+};
+
+/* ======== levels ========
+   Trees: x, top (height above the ground), branches as [direction, height, length, droop].
+   Leaps between branch tips are worked out automatically. */
+const LEVELS = [
+  { theme: 'spring', W: 760, H: 520,
+    ai: {speed: 0.55, think: [1.2, 2.2], mistake: 0.45},
+    nuts: {start: 10, drop: 0, every: 0}, mix: {acorn: 1}, golden: 0, berries: 0,
+    trees: [
+      {x: 150, top: 330, home: 'you', b: [[1, 110, 140, 6], [-1, 190, 90, 4], [1, 240, 130, 8]]},
+      {x: 610, top: 330, home: 'ai', b: [[-1, 110, 140, 6], [1, 190, 90, 4], [-1, 240, 130, 8]]},
+    ] },
+  { theme: 'summer', W: 860, H: 600,
+    ai: {speed: 0.6, think: [0.9, 1.8], mistake: 0.4},
+    nuts: {start: 8, drop: 6, every: 2.6}, mix: {acorn: 4, walnut: 1}, golden: 0, berries: 0,
+    trees: [
+      {x: 120, top: 380, home: 'you', b: [[1, 100, 140, 6], [1, 220, 130, 10], [-1, 160, 80, 4]]},
+      {x: 430, top: 460, b: [[-1, 150, 140, 8], [1, 150, 140, 8], [-1, 280, 110, 6], [1, 300, 120, 6]]},
+      {x: 740, top: 380, home: 'ai', b: [[-1, 100, 140, 6], [-1, 220, 130, 10], [1, 160, 80, 4]]},
+    ] },
+  { theme: 'birch', W: 1000, H: 680,
+    ai: {speed: 0.65, think: [0.7, 1.5], mistake: 0.35},
+    nuts: {start: 8, drop: 10, every: 2.3}, mix: {acorn: 4, walnut: 1}, golden: 1, berries: 0,
+    trees: [
+      {x: 110, top: 440, home: 'you', b: [[1, 120, 130, 6], [1, 250, 120, 8], [-1, 190, 80, 4], [1, 370, 100, 6]]},
+      {x: 370, top: 520, b: [[-1, 180, 120, 8], [1, 120, 140, 8], [1, 300, 120, 10], [-1, 380, 110, 6]]},
+      {x: 630, top: 500, b: [[-1, 140, 120, 8], [1, 220, 130, 8], [-1, 330, 120, 8], [1, 420, 90, 6]]},
+      {x: 890, top: 440, home: 'ai', b: [[-1, 120, 130, 6], [-1, 250, 120, 8], [1, 190, 80, 4], [-1, 370, 100, 6]]},
+    ] },
+  { theme: 'autumn', W: 1140, H: 760,
+    ai: {speed: 0.72, think: [0.6, 1.3], mistake: 0.3},
+    nuts: {start: 8, drop: 12, every: 2.2}, mix: {acorn: 4, walnut: 2}, golden: 2, berries: 2,
+    trees: [
+      {x: 110, top: 500, home: 'you', b: [[1, 110, 120, 6], [1, 240, 110, 8], [1, 380, 100, 6], [-1, 300, 80, 4]]},
+      {x: 340, top: 580, b: [[-1, 170, 100, 6], [1, 150, 110, 8], [-1, 320, 100, 8], [1, 300, 120, 8], [1, 460, 100, 6]]},
+      {x: 570, top: 620, b: [[-1, 230, 100, 8], [1, 200, 110, 8], [-1, 400, 110, 8], [1, 380, 110, 8], [-1, 530, 90, 6]]},
+      {x: 800, top: 580, b: [[-1, 150, 110, 6], [1, 240, 100, 8], [-1, 300, 120, 8], [1, 420, 100, 6]]},
+      {x: 1030, top: 500, home: 'ai', b: [[-1, 110, 110, 6], [-1, 260, 110, 8], [-1, 380, 100, 6], [1, 300, 70, 4]]},
+    ] },
+  { theme: 'winter', W: 1280, H: 840,
+    ai: {speed: 0.8, think: [0.5, 1.1], mistake: 0.25},
+    nuts: {start: 8, drop: 16, every: 2.0}, mix: {acorn: 4, walnut: 2}, golden: 3, berries: 2,
+    mushrooms: [210, 640, 1070],
+    trees: [
+      {x: 100, top: 540, home: 'you', b: [[1, 120, 110, 6], [1, 260, 110, 8], [-1, 340, 60, 4], [1, 420, 100, 6]]},
+      {x: 320, top: 640, b: [[-1, 190, 100, 6], [1, 170, 110, 8], [-1, 340, 100, 8], [1, 350, 110, 8], [1, 510, 100, 6]]},
+      {x: 530, top: 700, b: [[-1, 250, 90, 8], [1, 250, 80, 8], [-1, 430, 90, 8], [1, 460, 80, 8], [-1, 580, 90, 6]]},
+      {x: 750, top: 700, b: [[1, 250, 90, 8], [-1, 250, 80, 8], [1, 430, 90, 8], [-1, 460, 80, 8], [1, 580, 90, 6]]},
+      {x: 960, top: 640, b: [[1, 190, 100, 6], [-1, 170, 110, 8], [1, 340, 100, 8], [-1, 350, 110, 8], [-1, 510, 100, 6]]},
+      {x: 1180, top: 540, home: 'ai', b: [[-1, 120, 110, 6], [-1, 260, 110, 8], [1, 340, 60, 4], [-1, 420, 100, 6]]},
+    ] },
+  { theme: 'night', W: 1200, H: 800,
+    ai: {speed: 0.82, think: [0.5, 1.0], mistake: 0.25},
+    nuts: {start: 9, drop: 16, every: 2.0}, mix: {acorn: 4, walnut: 2}, golden: 2, berries: 2,
+    mushrooms: [440, 760],
+    trees: [
+      {x: 110, top: 520, home: 'you', b: [[1, 110, 110, 6], [1, 250, 100, 8], [-1, 330, 70, 4], [1, 400, 110, 6]]},
+      {x: 340, top: 600, b: [[-1, 170, 100, 6], [1, 180, 110, 8], [-1, 330, 110, 8], [1, 340, 100, 8], [-1, 480, 100, 6]]},
+      {x: 600, top: 660, b: [[-1, 240, 110, 8], [1, 240, 110, 8], [-1, 420, 100, 8], [1, 420, 100, 8], [1, 560, 90, 6]]},
+      {x: 860, top: 600, b: [[1, 170, 100, 6], [-1, 180, 110, 8], [1, 330, 110, 8], [-1, 340, 100, 8], [1, 480, 100, 6]]},
+      {x: 1090, top: 520, home: 'ai', b: [[-1, 110, 110, 6], [-1, 250, 100, 8], [1, 330, 70, 4], [-1, 400, 110, 6]]},
+    ] },
+  { theme: 'rain', W: 1380, H: 880,
+    ai: {speed: 0.86, think: [0.45, 0.95], mistake: 0.22},
+    nuts: {start: 9, drop: 18, every: 1.9}, mix: {acorn: 4, walnut: 2}, golden: 3, berries: 2,
+    mushrooms: [225, 690, 1155],
+    trees: [
+      {x: 100, top: 560, home: 'you', b: [[1, 120, 110, 6], [1, 270, 100, 8], [-1, 350, 60, 4], [1, 430, 110, 6]]},
+      {x: 330, top: 660, b: [[-1, 200, 110, 6], [1, 180, 100, 8], [-1, 360, 110, 8], [1, 350, 100, 8], [1, 520, 100, 6]]},
+      {x: 570, top: 720, b: [[-1, 260, 120, 8], [1, 280, 100, 8], [-1, 450, 110, 8], [1, 460, 100, 8], [-1, 610, 90, 6]]},
+      {x: 810, top: 720, b: [[1, 260, 120, 8], [-1, 280, 100, 8], [1, 450, 110, 8], [-1, 460, 100, 8], [1, 610, 90, 6]]},
+      {x: 1050, top: 660, b: [[1, 200, 110, 6], [-1, 180, 100, 8], [1, 360, 110, 8], [-1, 350, 100, 8], [-1, 520, 100, 6]]},
+      {x: 1280, top: 560, home: 'ai', b: [[-1, 120, 110, 6], [-1, 270, 100, 8], [1, 350, 60, 4], [-1, 430, 110, 6]]},
+    ] },
+  { theme: 'aurora', W: 1560, H: 940,
+    ai: {speed: 0.9, think: [0.4, 0.85], mistake: 0.2},
+    nuts: {start: 10, drop: 20, every: 1.8}, mix: {acorn: 4, walnut: 3}, golden: 3, berries: 3,
+    mushrooms: [220, 670, 890, 1340],
+    trees: [
+      {x: 100, top: 600, home: 'you', b: [[1, 120, 110, 6], [1, 280, 100, 8], [-1, 360, 60, 4], [1, 460, 110, 6]]},
+      {x: 330, top: 700, b: [[-1, 210, 110, 6], [1, 190, 100, 8], [-1, 380, 110, 8], [1, 370, 100, 8], [1, 550, 100, 6]]},
+      {x: 560, top: 760, b: [[-1, 270, 110, 8], [1, 280, 100, 8], [-1, 470, 100, 8], [1, 470, 100, 8], [-1, 640, 90, 6]]},
+      {x: 780, top: 800, b: [[-1, 320, 100, 8], [1, 320, 100, 8], [-1, 520, 100, 8], [1, 520, 100, 8], [1, 690, 90, 6]]},
+      {x: 1000, top: 760, b: [[1, 270, 110, 8], [-1, 280, 100, 8], [1, 470, 100, 8], [-1, 470, 100, 8], [1, 640, 90, 6]]},
+      {x: 1230, top: 700, b: [[1, 210, 110, 6], [-1, 190, 100, 8], [1, 380, 110, 8], [-1, 370, 100, 8], [-1, 550, 100, 6]]},
+      {x: 1460, top: 600, home: 'ai', b: [[-1, 120, 110, 6], [-1, 280, 100, 8], [1, 360, 60, 4], [-1, 460, 110, 6]]},
+    ] },
+];
+// Each level is a season: sky, hills, tree kinds, leaves, ground, bushes, things on the floor and what drifts through the air.
+const OAK_BARK = ['#b88552', '#8e5c34', '#6e4426', '#55331c', '#3d2414'];
+const DARK_BARK = ['#8a6a50', '#6a4e3a', '#4c3626', '#3a281c', '#2a1c12'];
+const GREEN = ['#a6e06a', '#78c24a', '#55a03a', '#3b7e2e', '#285a22'];
+const THEMES = {
+  spring: {
+    bands: ['#4f95cf', '#62a6d8', '#7cb8df', '#98c9e2', '#b7d9e0', '#d7e7d6', '#f1ecc6'], mtn: ['#8fb1c3', '#7d9fb4', '#c4dbe3'], tint: null, sun: '#fff6d0',
+    far: ['#5a9a80', '#78b49a'], mid: {tones: ['#64ad70', '#4c955e', '#3a7e4e'], base: '#2f6a44', bark: '#5a5038', blossom: '#ffd0e0'}, fore: ['#1c4a28', '#245a30'],
+    floor: {near: ['#66ad42', '#5fa43e', '#4a8a30', '#86c45a'], far: ['#86b896', '#80b391', '#74a888', '#9ccaa4'], dots: ['#fff3b0', '#f7a8c0', '#ffffff'], rate: 0.014},
+    bark: OAK_BARK, trees: ['oak'], leaves: [['#b8ee80', '#8ad656', '#62b23e', '#428c30', '#2a6024']], blossom: ['#ffd0e0', '#ffffff', '#ffb0cc'],
+    grass: ['#4f9a35', '#6abb44'], flowers: ['#ffe680', '#ff9ec4', '#ffffff', '#b0a0ff'], flowerGap: 36,
+    bush: {tones: GREEN, dots: ['#ffffff', '#ffd0e0'], every: 150}, decor: ['mushroom', 'mushroom'],
+    drift: {cols: ['#ffd0e0', '#ffffff', '#ffb0cc'], n: 14, fall: 20},
+  },
+  summer: {
+    bands: ['#3d8fd6', '#4f9bdb', '#64a9e0', '#7cb8e5', '#96c8ea', '#b2d8ee', '#cfe6ee'], mtn: ['#86aac4', '#7393af', '#bdd6e6'], tint: null, sun: '#fffbe8',
+    far: ['#4d8678', '#69a191'], mid: {tones: ['#4f9163', '#3b7a52', '#2f6646'], base: '#2d5c41', bark: '#4a4632'}, fore: ['#173a22', '#1f4a2b'],
+    floor: {near: ['#5d9e3e', '#56953a', '#3f7a2c', '#79b850'], far: ['#7fae8f', '#7aa98a', '#6f9e7e', '#94bf9c'], dots: ['#ff5a40', '#fff3b0', '#ffffff'], rate: 0.008},
+    bark: OAK_BARK, trees: ['oak'], leaves: [GREEN, ['#94d454', '#68b83c', '#489630', '#337426', '#20521a']],
+    grass: ['#3f7d2c', '#5aa63a'], tall: true, flowers: ['#e83a2a', '#e83a2a', '#ffe680', '#ffffff'], flowerGap: 60,
+    bush: {tones: ['#94d454', '#68b83c', '#489630', '#337426', '#20521a'], dots: ['#d0302a', '#ff5040'], every: 110}, decor: ['mushroom'],
+    drift: {cols: ['#9fc84a', '#78c24a'], n: 6, fall: 24},
+  },
+  birch: {
+    bands: ['#5a98cc', '#73a8d2', '#90b9d6', '#b0cad6', '#d2d8cc', '#ebdcb8', '#f6d9a2'], mtn: ['#9aa9b8', '#8394a6', '#d0d6dc'], tint: ['#ffb060', 0.08], sun: '#fff0c0',
+    far: ['#6a9070', '#86a888'], mid: {tones: ['#b8c060', '#98a84c', '#78903c'], base: '#5a6e34', bark: '#e0dccc', marks: '#3a3630'}, fore: ['#3a4a1c', '#4a5a24'],
+    floor: {near: ['#8aa848', '#82a042', '#6a8836', '#a8c060'], far: ['#a8b890', '#a2b28a', '#96a87e', '#bac8a0'], dots: ['#fff3b0', '#ffffff', '#e8c040'], rate: 0.01},
+    bark: OAK_BARK, trees: ['birch', 'oak', 'birch'], leaves: [['#f4ec78', '#d6dc54', '#aec442', '#86a232', '#5c7a22'], ['#dcec78', '#b8d850', '#90b83c', '#6c962e', '#4c6e20']],
+    grass: ['#7a9a3a', '#98b448'], flowers: ['#ffe680', '#ffffff'], flowerGap: 80,
+    bush: {tones: ['#c0d868', '#9cbc4c', '#7a9a3a', '#5a7a2c', '#3e5a1e'], fern: true, every: 100}, decor: ['fern', 'mushroom'],
+    drift: {cols: ['#f0d850', '#e0c040', '#c8d050'], n: 10, fall: 22},
+  },
+  autumn: {
+    bands: ['#4a4f8f', '#6b5b9e', '#9a64a0', '#c8709a', '#e8848a', '#f6a37c', '#fbc77c'], mtn: ['#7a6a9a', '#685888', '#b49ac0'], tint: ['#ff7a40', 0.12], sun: '#ffd9a0',
+    far: ['#7a5a58', '#987068'], mid: {tones: ['#d8883c', '#b8642c', '#8a4220'], alt: ['#d05a34', '#a83c24', '#7a2a18'], base: '#5a3420', bark: '#4a3424'}, fore: ['#3a2010', '#4a2a14'],
+    floor: {near: ['#a8883a', '#9e8034', '#846828', '#c89a48'], far: ['#b8988a', '#b09282', '#a2887a', '#c8aa98'], dots: ['#e85a28', '#f0a030', '#c03020', '#f0d040'], rate: 0.06},
+    bark: OAK_BARK, trees: ['oak'],
+    leaves: [['#ffc860', '#f49a34', '#d47024', '#a84e1a', '#7a3412'], ['#ff9a6a', '#e85a34', '#bc3a22', '#8c2818', '#601810'], ['#fff488', '#f4d444', '#d4aa2a', '#a47c1c', '#725414']],
+    grass: ['#8a7a30', '#a89038'], flowers: [], flowerGap: 0,
+    bush: {tones: ['#ff9a5a', '#e46a34', '#bc4826', '#8c301a', '#601e12'], dots: ['#ffd040'], every: 130}, decor: ['mushroom', 'mushroom', 'mushroom'], cloud: ['#ffc8b4', '#e8949c'], canopyShade: '#4a1428',
+    drift: {cols: ['#f09030', '#e05030', '#f0d040', '#c86a20'], n: 20, fall: 30},
+  },
+  winter: {
+    bands: ['#1d2550', '#2a3366', '#3d437c', '#585290', '#7a63a0', '#a476a8', '#d092a8'], mtn: ['#4d4f7c', '#3f416c', '#7a7aa8'], tint: ['#3040a0', 0.12], sun: '#f4f0d8', stars: true, snow: true,
+    far: ['#3a5468', '#56708a'], mid: {tones: ['#3a6a62', '#2c5650', '#204440'], base: '#1c3434', bark: '#2c2c28', pine: true}, fore: ['#0d2218', '#123020'],
+    floor: {near: ['#e4ecf8', '#d8e2f2', '#bfcde4', '#ffffff'], far: ['#8e9ac0', '#8894b8', '#7e8aae', '#a0aacc'], dots: ['#ffffff'], rate: 0.01},
+    bark: DARK_BARK, trees: ['pine', 'bare', 'pine'], leaves: [['#4a8a68', '#3a7a5a', '#2c6248', '#204e3a', '#143428']],
+    grass: null, flowers: [], flowerGap: 0,
+    bush: {tones: ['#4a8a68', '#3a7a5a', '#2c6248', '#204e3a', '#143428'], every: 130}, decor: ['snowman', 'snowpile', 'snowpile'], canopyShade: '#1c2a50',
+    drift: {cols: ['#ffffff', '#e8f0ff'], n: 34, fall: 34, snow: true},
+  },
+};
+// The extra levels borrow a season's pictures and music (art) and bring their own sky, light and things in the air.
+// worldTint darkens the trees and ground for a night; the squirrels and nuts stay bright.
+THEMES.night = {...THEMES.summer, art: 'summer', stars: true, sun: '#fff6dc',
+  bands: ['#0c1230', '#131c44', '#1a2654', '#223062', '#2c3c6e', '#384a78', '#465a82'], mtn: ['#2a3858', '#22304c', '#46567a'], tint: ['#16245a', 0.3],
+  worldTint: ['#101c50', 0.34], cloud: ['#46527e', '#363f6a'], canopyShade: '#08142a',
+  floor: {near: ['#2c5434', '#284e30', '#1e4028', '#36623c'], far: ['#30425a', '#2c3e56', '#28384e', '#3a4c64'], dots: ['#ffe680'], rate: 0.004},
+  flowers: ['#d8d0ff', '#ffffff'], flowerGap: 70, decor: ['mushroom'],
+  drift: {cols: ['#fff27a', '#e4ff7a', '#ffe680'], n: 18, fall: 0, glow: true}};
+THEMES.rain = {...THEMES.spring, art: 'spring', rainbow: true, sun: '#e8eef4',
+  bands: ['#5a7290', '#68809c', '#768ea6', '#869cb0', '#96aab8', '#a6b6c0', '#b8c4c8'], mtn: ['#7a90a8', '#6a8098', '#a8bccc'], tint: ['#405878', 0.1],
+  worldTint: ['#304868', 0.08], cloud: ['#d0d8e2', '#a8b4c4'],
+  drift: {cols: ['#d4e4f6', '#aac6e6'], n: 70, fall: 280, rain: true}};
+THEMES.aurora = {...THEMES.winter, art: 'winter', aurora: true,
+  bands: ['#080e2a', '#0e1838', '#142046', '#1c2a54', '#263660', '#32426c', '#404e76'], mtn: ['#2e3a62', '#263256', '#5a6890'], tint: ['#1c2c6a', 0.18],
+  worldTint: ['#141e4a', 0.2], cloud: ['#343e6a', '#2a3360'],
+  drift: {cols: ['#ffffff', '#e8f0ff'], n: 24, fall: 26, snow: true}};
+
+/* ======== helpers ======== */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const mod = (a, n) => ((a % n) + n) % n;
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function rng(seed) { return () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash2(a, b) { let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function hex32(h) { const n = parseInt(h.slice(1), 16); return (255 << 24 | (n & 255) << 16 | (n >> 8 & 255) << 8 | n >> 16) >>> 0; }
+function mix(a, b, t) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const c = s => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+  return '#' + ((c(16) << 16) | (c(8) << 8) | c(0)).toString(16).padStart(6, '0'); }
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('nutrun.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('nutrun.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+
+/* ======== pictures (PixelLab sprites in assets/) ======== */
+// Squirrel sheets: 80x80 cells, one row per animation, facing right. Grey is a recolour of red.
+const SHEET = {cell: 80, ax: 37, ay: 55, rows: {idle: [0, 8], run: [1, 6], jump: [2, 8], eat: [3, 7], climb: [4, 8], leap: [5, 8], spin: [6, 8], back: [7, 8],
+  climb1: [8, 9], groom: [9, 12], yawn: [10, 11], look: [11, 8]}};
+const IDLE_TRICKS = ['groom', 'yawn', 'look', 'eat'];   // things a squirrel does now and then while it waits
+const IDLE_EVERY = [2.5, 5];   // seconds between them
+const IMG = {};
+function loadImg(name) {
+  return new Promise(res => { const i = new Image(); i.onload = () => { IMG[name] = i; res(); }; i.onerror = () => res(); i.src = `assets/${name}.png?v=${ASSET_V}`; });
+}
+const ready = Promise.all(['squirrel-red', 'squirrel-grey', 'nut-acorn', 'nut-walnut', 'nut-golden', 'nut-berries',
+  'bush-spring', 'bush-summer', 'bush-birch', 'bush-autumn', 'bush-winter', 'mushroom-bounce', 'mushroom-bounce-winter', 'mushroom-small',
+  ...['spring', 'summer', 'birch', 'autumn', 'winter'].flatMap(t => [`bg-${t}-hills`, `bg-${t}-far`, `bg-${t}-mid`]),
+  'bark-oak', 'bark-birch', 'bark-winter', ...['spring', 'summer', 'birch', 'autumn', 'winter'].flatMap(t => ['leaf-' + t, 'branch-' + t]), 'branch-fir', 'moon', 'top-spring', 'top-summer', 'top-birch', 'top-autumn-a', 'top-autumn-b', 'top-winter',
+  'crown-autumn', 'crown-maple', 'crown-winter', 'cluster-autumn', 'cluster-maple', 'cluster-winter', 'crown-snow-b',
+  ...['spring', 'summer', 'birch'].flatMap(t => ['a', 'b'].flatMap(k => ['crown-' + t + '-' + k, 'cluster-' + t + '-' + k])),
+  ...['autumn', 'maple', 'spring-a', 'spring-b', 'summer-a', 'summer-b', 'birch-a', 'birch-b'].flatMap(k => [0, 1, 2].map(i => `bunch-${k}-${i}`))]
+  .filter(n => n !== 'bg-winter-hills')   // winter keeps the mountains drawn in code
+  .map(loadImg));
+// the pixels of a picture (null when the browser won't share them, e.g. opened from disk)
+function pixels(img) {
+  try { const c = makeCanvas(img.width, img.height), g = c.getContext('2d'); g.drawImage(img, 0, 0); return g.getImageData(0, 0, img.width, img.height).data; } catch (e) { return null; }
+}
+// A PixelLab branch picture (base on the left, tip on the right): the columns it covers and a straight line
+// along the top of its bark (fitted on the thick first 60%, so twigs at the tip don't count).
+const branchFit = {};
+function branchArt(theme) {
+  if (theme in branchFit) return branchFit[theme];
+  const img = IMG['branch-' + theme], d = img && pixels(img);
+  if (!d) return branchFit[theme] = null;
+  const W = img.width, H = img.height, top = [];
+  for (let x = 0; x < W; x++) { top[x] = -1; for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + 3] > 128) { top[x] = y; break; } }
+  const cols = top.map((t, x) => x).filter(x => top[x] >= 0);
+  const xs = cols[0] + 6, xe = cols[cols.length - 1];          // skip the sawn-off end at the base
+  const fitTo = xs + (xe - xs) * 0.6; let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let x = xs; x <= fitTo; x++) if (top[x] >= 0) { n++; sx += x; sy += top[x]; sxx += x * x; sxy += x * top[x]; }
+  const b = (n * sxy - sx * sy) / (n * sxx - sx * sx || 1), a = (sy - b * sx) / n;
+  // bark colour, darkest colour and thickness over the first 12 columns, for the collar at the trunk
+  const cnt = {}; let thick = 0, dark = null, darkL = 999;
+  for (let x = xs; x < xs + 12; x++) { let n = 0; for (let y = 0; y < H; y++) { const i = (y * W + x) * 4; if (d[i + 3] > 128) {
+    n++; const k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; cnt[k] = (cnt[k] || 0) + 1; const L = d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11; if (L < darkL) { darkL = L; dark = k; } } } thick += n / 12; }
+  const bark = Object.entries(cnt).sort((p, q) => q[1] - p[1])[0][0];
+  const mixed = bark.split(',').map((v, i) => Math.round(v * 0.6 + dark.split(',')[i] * 0.4)).join(',');   // halfway to the darkest
+  return branchFit[theme] = {img, xs, xe, line: x => a + b * x, thick: Math.round(thick), bark: `rgb(${bark})`, shade: `rgb(${mixed})`, dark: `rgb(${dark})`};
+}
+// five bark shades, light to dark, picked from a bark picture
+function barkPalette(img, fallback) {
+  const d = img && pixels(img); if (!d) return fallback;
+  const cols = [];
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) cols.push([d[i], d[i + 1], d[i + 2], d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11]);
+  if (cols.length < 20) return fallback;
+  cols.sort((a, b) => b[3] - a[3]);
+  return [0.05, 0.25, 0.5, 0.75, 0.95].map(q => { const c = cols[Math.floor(q * (cols.length - 1))]; return '#' + ((c[0] << 16) | (c[1] << 8) | c[2]).toString(16).padStart(6, '0'); });
+}
+function frame(who, anim, i) {
+  const [row, n] = SHEET.rows[anim];
+  return {img: IMG[who === 'you' ? 'squirrel-red' : 'squirrel-grey'], sx: (mod(i, n)) * SHEET.cell, sy: row * SHEET.cell};
+}
+function nutImg(type) { return IMG['nut-' + type]; }
+
+/* ======== background layers (parallax), drawn once per sky ======== */
+function wrapPx(g, W, x, y, w, h) { g.fillRect(mod(x, W), y, w, h); if (mod(x, W) + w > W) g.fillRect(mod(x, W) - W, y, w, h); }
+function blob(g, W, cx, cy, r, colorAt) {
+  for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+    const dx = x + .5 - cx, dy = y + .5 - cy, d = Math.hypot(dx, dy);
+    if (d > r) continue;
+    const col = colorAt(dx / r, dy / r, x, y, d / r); if (!col) continue;
+    g.fillStyle = col; wrapPx(g, W, x, y, 1, 1);
+  }
+}
+function buildMountains(S) {
+  const W = 1024, H = 180, c = makeCanvas(W, H), g = c.getContext('2d'), R = rng(3);
+  const ph = [R() * 6.3, R() * 6.3, R() * 6.3, R() * 6.3, R() * 6.3], TAU = Math.PI * 2;
+  const h = x => 88 + 32 * Math.sin(TAU * x / W + ph[0]) + 20 * Math.sin(TAU * 2 * x / W + ph[1]) + 12 * Math.sin(TAU * 5 * x / W + ph[2]) + 6 * Math.sin(TAU * 11 * x / W + ph[3]) + 2.5 * Math.sin(TAU * 29 * x / W + ph[4]);
+  const [base, shade, light] = S.mtn, haze = mix(base, S.bands[S.bands.length - 1], 0.35);
+  for (let x = 0; x < W; x++) {
+    const hx = h(x), top = Math.round(H - hx);
+    g.fillStyle = base; g.fillRect(x, top, 1, H - top);
+    if (h(x + 1) < hx) { g.fillStyle = shade; for (let y = top; y < top + 26; y++) if ((x + y) % 2 || y < top + 12) g.fillRect(x, y, 1, 1); }
+    const snowLine = S.snow ? 100 : 130;
+    if (hx > snowLine) { g.fillStyle = S.stars ? '#d0d4ec' : '#eef5f6'; g.fillRect(x, top, 1, Math.round((hx - snowLine) / 2) + 2); }
+    g.fillStyle = light; g.fillRect(x, top, 1, 1);
+    g.fillStyle = haze; for (let y = H - 30; y < H; y++) if ((x + y) % 2 === 0 || y > H - 14) g.fillRect(x, y, 1, 1);   // haze near the foot
+  }
+  return {c, f: 0.12, base: haze};
+}
+// a cone of a fir tree, tier by tier, lit from the left (with snow on top in winter)
+function firTree(g, W, cx, top, h, w, tones, snow) {
+  const tiers = 4;
+  for (let k = 0; k < tiers; k++) {
+    const ty = top + k * h * 0.2, th = h * 0.36, tw = w * (0.45 + k * 0.2);
+    for (let r = 0; r < th; r++) {
+      const hw = Math.round(tw * (r / th) * (0.85 + 0.15 * Math.sin(r)));
+      const y = Math.round(ty + r);
+      for (let dx = -hw; dx <= hw; dx++) {
+        const l = -dx / Math.max(1, hw);
+        let col = l > .45 ? tones[0] : l > -.3 ? tones[1] : tones[2];
+        if (snow && (r < 3 || (r > th - 3 && Math.abs(dx) > hw - 3)) && hash2(cx + dx, y) < .8) col = r < 3 ? '#ffffff' : '#dfe8f6';
+        g.fillStyle = col; wrapPx(g, W, cx + dx, y, 1, 1);
+      }
+    }
+  }
+}
+function buildFarForest(S) {
+  const W = 768, H = 160, c = makeCanvas(W, H), g = c.getContext('2d'), R = rng(11);
+  const [dark, light] = S.far;
+  g.fillStyle = dark; g.fillRect(0, H - 28, W, 28);
+  for (let i = 0; i < 46; i++) {
+    const cx = Math.round(R() * W), h = 44 + R() * 80, base = H - 24 + Math.round(R() * 8), tier = h / 4;
+    for (let yy = 0; yy < h; yy++) {
+      const hw = Math.round((yy / h) * h * 0.22 * (0.5 + 0.5 * (yy % tier) / tier));
+      const y = Math.round(base - h + yy);
+      g.fillStyle = dark; wrapPx(g, W, cx - hw, y, hw * 2 + 1, 1);
+      g.fillStyle = S.snow && yy % tier < 2 ? '#c8d2e8' : light; wrapPx(g, W, cx - hw, y, 2, 1);
+    }
+    g.fillStyle = dark; wrapPx(g, W, cx - 1, base - 2, 3, 6);
+  }
+  return {c, f: 0.28, base: dark};
+}
+function buildMidForest(S) {
+  const M = S.mid, W = 896, H = 300, c = makeCanvas(W, H), g = c.getContext('2d'), R = rng(23);
+  g.fillStyle = M.base; g.fillRect(0, H - 36, W, 36);
+  for (let i = 0; i < 11; i++) {
+    const x = Math.round((i + R() * 0.6) * W / 11), tw = 6 + (R() * 8 | 0), cy = Math.round(44 + R() * 80);
+    g.fillStyle = M.bark; wrapPx(g, W, x - (tw >> 1), cy, tw, H - cy);
+    g.fillStyle = mix(M.bark, '#ffffff', .15); wrapPx(g, W, x - (tw >> 1), cy, 2, H - cy);
+    if (M.marks) { g.fillStyle = M.marks; for (let y = cy; y < H; y += 7 + (R() * 9 | 0)) wrapPx(g, W, x - (tw >> 1) + (R() * 3 | 0), y, 2 + (R() * 3 | 0), 1); }
+    if (M.pine) { firTree(g, W, x, cy - 40, H - cy - 20, 34 + R() * 14, M.tones, S.snow); continue; }
+    const tones = M.alt && i % 3 === 1 ? M.alt : M.tones;
+    for (let k = 0; k < 6; k++) {
+      const bx = x + (R() - .5) * 52, by = cy + (R() - .5) * 36, r = 18 + R() * 16;
+      blob(g, W, bx, by, r, (dx, dy, px, py) => {
+        if (M.blossom && hash2(px >> 1, py >> 1) < .05) return M.blossom;
+        const l = -dx - dy + (hash2(px >> 2, py >> 2) - .5) * .5;
+        if (l > 0.55 || (l > 0.35 && (px + py) % 2)) return tones[0];
+        if (l > -0.4 || (l > -0.6 && (px + py) % 2)) return tones[1];
+        return tones[2];
+      });
+    }
+  }
+  return {c, f: 0.55, base: M.base};
+}
+function buildFore(S) {
+  const W = 720, H = 88, c = makeCanvas(W, H), g = c.getContext('2d'), R = rng(5);
+  const [a, b] = S.fore;
+  for (let p = 0; p < 4; p++) {
+    const px = p * 180 + R() * 80;
+    for (let k = 0; k < 11; k++) {
+      const x0 = px + k * 5, h = 24 + R() * 56, lean = (R() - .5) * 28;
+      for (let s = 0; s <= h; s++) {
+        const t = s / h; g.fillStyle = S.snow && t > .9 ? '#dfe8f6' : k % 2 ? a : b;
+        wrapPx(g, W, Math.round(x0 + lean * t * t), Math.round(H - s), t < .6 ? 3 : t < .85 ? 2 : 1, 1);
+      }
+    }
+  }
+  return {c, f: 1.35};
+}
+function cloudSprite(R, w, night, cols) {
+  const h = Math.round(w * .45), circles = [];
+  for (let i = 0; i < 6; i++) circles.push([w * (.12 + .76 * i / 5), h * (.55 + R() * .2), h * (.28 + R() * .3)]);
+  const [hi, lo] = cols || (night ? ['#8a8fb8', '#6a6f98'] : ['#ffffff', '#dbe9ef']);   // a sunset theme gives its own
+  const c = makeCanvas(w, h), g = c.getContext('2d');
+  for (let y = 0; y < h * .8; y++) for (let x = 0; x < w; x++)
+    for (const [cx, cy, r] of circles) if (Math.hypot(x + .5 - cx, y + .5 - cy) < r) { g.fillStyle = y > h * .6 ? lo : hi; g.fillRect(x, y, 1, 1); break; }
+  return c;
+}
+// A background strip whose trees stand on a little island of ground (empty below and beside it) gets one ground
+// all the way along, in the island's own colour, so no grove floats. Then it loses some colour (BG_GREY).
+function groundAndGrey(g, W, H) {
+  const im = g.getImageData(0, 0, W, H), d = im.data, at = (x, y) => (y * W + x) * 4;
+  let bottomFull = 0; for (let x = 0; x < W; x++) if (d[at(x, H - 1) + 3] > 128) bottomFull++;
+  if (bottomFull < W * .9) {
+    const count = y => { let n = 0; for (let x = 0; x < W; x++) if (d[at(x, y) + 3] > 128) n++; return n; };
+    let low = H - 1; while (low > 0 && !count(low)) low--;
+    let most = 0; for (let y = low; y > low - H * .25; y--) most = Math.max(most, count(y));
+    let top = low; while (top > 0 && count(top - 1) >= most * .5) top--;   // the island: the wide rows at the bottom
+    const cnt = {}; for (let y = top; y <= low; y++) for (let x = 0; x < W; x++) { const i = at(x, y); if (d[i + 3] > 200) { const k = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2]; cnt[k] = (cnt[k] || 0) + 1; } }
+    const k = +Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0], col = [k >> 16 & 255, k >> 8 & 255, k & 255];
+    for (let y = top + 2; y < H; y++) for (let x = 0; x < W; x++) { const i = at(x, y); if (d[i + 3] < 255) { d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255; } }
+  }
+  for (let i = 0; i < d.length; i += 4) { const L = d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11;
+    d[i] += (L - d[i]) * BG_GREY; d[i + 1] += (L - d[i + 1]) * BG_GREY; d[i + 2] += (L - d[i + 2]) * BG_GREY; }
+  g.putImageData(im, 0, 0);
+}
+function layerFromImg(img, f, fallbackBase, haze, hazeAmt) {
+  const c = makeCanvas(img.width * 2, img.height), g = c.getContext('2d');
+  g.drawImage(img, 0, 0); g.save(); g.translate(img.width * 2, 0); g.scale(-1, 1); g.drawImage(img, 0, 0); g.restore();
+  try { groundAndGrey(g, c.width, c.height); } catch (e) {}   // no pixels from disk: leave it as it is
+  hazeAmt += BG_HAZE;
+  // a little of the horizon colour over it, so farther layers look farther away
+  if (hazeAmt) { g.globalCompositeOperation = 'source-atop'; g.globalAlpha = hazeAmt; g.fillStyle = haze; g.fillRect(0, 0, c.width, c.height); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+  // fill colour under the strip: the average of its bottom rows (after the haze)
+  let base = fallbackBase;
+  try {
+    const d = g.getImageData(0, c.height - 4, c.width, 4).data; let r = 0, gg = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; }
+    if (n) base = '#' + ((Math.round(r / n) << 16) | (Math.round(gg / n) << 8) | Math.round(b / n)).toString(16).padStart(6, '0');
+  } catch (e) {}
+  return {c, f, base};
+}
+const themeCache = {};
+function themeArt(name) {
+  if (themeCache[name]) return themeCache[name];
+  const S = THEMES[name], R = rng(9);
+  const sunR = 18, sun = makeCanvas(sunR * 2 + 10, sunR * 2 + 10), sg = sun.getContext('2d');
+  for (let y = 0; y < sun.height; y++) for (let x = 0; x < sun.width; x++) {
+    const d = Math.hypot(x - sun.width / 2, y - sun.height / 2);
+    if (d < sunR) { sg.fillStyle = S.sun; sg.fillRect(x, y, 1, 1); } else if (d < sunR + 5 && (x + y) % 2) { sg.fillStyle = mix(S.sun, S.bands[3], .4); sg.fillRect(x, y, 1, 1); }
+  }
+  if (S.stars && IMG.moon) {   // night: the PixelLab moon with a faint dithered glow round it
+    const m = IMG.moon, r = m.width / 2, c = makeCanvas(m.width + 14, m.height + 14), mg = c.getContext('2d'), glow = mix(S.sun, S.bands[2], .55);
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const d = Math.hypot(x + .5 - c.width / 2, y + .5 - c.height / 2);
+      if (d > r - 1 && d < r + 6 && (x + y) % 2 && (d < r + 3 || (x * 3 + y) % 4 === 1)) { mg.fillStyle = glow; mg.fillRect(x, y, 1, 1); }
+    }
+    mg.drawImage(m, 7, 7); sun.width = c.width; sun.height = c.height; sun.getContext('2d').drawImage(c, 0, 0);
+  }
+  const horizon = S.bands[S.bands.length - 2];
+  const A = S.art || name;   // whose pictures these are
+  const pl = (key, f, build, hz) => IMG[`bg-${A}-${key}`] ? layerFromImg(IMG[`bg-${A}-${key}`], f, build(S).base, horizon, hz) : build(S);
+  return themeCache[name] = {S, layers: [pl('hills', 0.12, buildMountains, 0.1), pl('far', 0.28, buildFarForest, 0.32), pl('mid', 0.55, buildMidForest, 0.28)], fore: buildFore(S), sun,
+    clouds: [80, 60, 104, 70].map((w, i) => ({spr: cloudSprite(R, w, S.stars, S.cloud), x: i * 300 + R() * 120, y: 260 + R() * 200, v: 3 + R() * 5}))};
+}
+
+/* ======== level state: trees, walkable lines, routes ======== */
+let LV, LEVEL = 0, WORLD_W, WORLD_H, GROUND, FLOOR_TOP, TRUNKS, PLATS, GROUND_P, NODES, LINKS, MUSH, WORLD, ART;
+const season = () => THEMES[LV.theme].art || LV.theme;   // the season whose pictures and music a level uses
+const pY = (p, x) => p.y1 + (x - p.x1) * (p.y2 - p.y1) / (p.x2 - p.x1);
+const atTrunk = x => TRUNKS.some(t => Math.abs(t.cx - x) < 1);
+function loadLevel(i) {
+  LEVEL = i; LV = LEVELS[i];
+  WORLD_W = LV.W; WORLD_H = LV.H; GROUND = WORLD_H - 56; FLOOR_TOP = GROUND - 68;
+  TRUNKS = LV.trees.map(t => ({cx: t.x, w: t.home ? 38 : 32, top: GROUND - t.top, home: t.home}));
+  PLATS = [];
+  LV.trees.forEach((t, ti) => { const taken = []; for (const [dir, h0, len, droop] of t.b) {
+    // a branch level with one on the other side would look like a single stick through the trunk: lift it a bit
+    const h = taken.some(([d, y]) => d !== dir && Math.abs(y - h0) < 16) ? h0 + 18 : h0;
+    taken.push([dir, h]);
+    let x1 = t.x, y1 = GROUND - h, x2 = t.x + dir * len, y2 = GROUND - h + droop;
+    if (x1 > x2) [x1, y1, x2, y2] = [x2, y2, x1, y1];
+    PLATS.push({x1, y1, x2, y2, tree: ti, dir});
+  } });
+  PLATS.push({x1: 0, y1: GROUND, x2: WORLD_W, y2: GROUND, ground: true});
+  GROUND_P = PLATS.length - 1;
+  MUSH = (LV.mushrooms || []).map(x => ({x, squash: 0}));
+  buildRoutes();
+  ART = themeArt(LV.theme);
+  fetchTrack(season());
+  drift = makeDrift();
+  WORLD = buildWorld();
+}
+
+/* ======== the static playfield (trees, branches, bushes), drawn once per level ======== */
+function buildWorld() {
+  const T = THEMES[LV.theme], c = makeCanvas(WORLD_W, WORLD_H), g = c.getContext('2d'), R = rng(77 + LEVEL);
+  const P = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+  const SNOW = '#ffffff', SNOW2 = '#dfe8f6';
+  // leaves lit from the upper left, in clumps, with optional blossom and snow
+  const leafy = (pal, extra) => (dx, dy, px, py) => {
+    if (extra && extra.blossom && hash2(px >> 1, py >> 1) < .06) return extra.blossom[hash2(px, py) * extra.blossom.length | 0];
+    if (extra && extra.dots && hash2(px >> 1, py >> 1) < .05) return extra.dots[hash2(px, py) * extra.dots.length | 0];
+    if (extra && extra.snow && dy < -.55 && hash2(px, py) < .9) return dy < -.75 ? SNOW : SNOW2;
+    if (extra && extra.ground && py > GROUND + 1) return null;
+    const cell = hash2(px >> 2, py >> 2), l = -dx * .7 - dy + (cell - .5) * .55;
+    if (hash2(px, py) < .04) return pal[4];
+    if (l > .75) return pal[0];
+    if (l > .45) return (px + py) % 2 ? pal[0] : pal[1];
+    if (l > .1) return pal[1];
+    if (l > -.25) return (px + py) % 2 ? pal[1] : pal[2];
+    if (l > -.6) return pal[2];
+    return pal[3];
+  };
+  TRUNKS.forEach((t, i) => {
+    t.style = t.home && T.trees[0] !== 'pine' ? T.trees[0] : T.trees[i % T.trees.length];
+    if (t.home && T.trees.includes('pine')) t.style = 'pine';
+    t.leaves = T.leaves[(i * 2 + LEVEL) % T.leaves.length];
+    t.kind = t.style === 'pine' ? 'Fir' : t.style === 'bare' ? 'Bare' : t.style === 'birch' ? 'Birch' : season() === 'autumn' && i % 2 ? 'Maple' : 'Oak';
+  });
+  const birchCol = (e, x, y, x0) => {
+    if (hash2(Math.floor((x - x0) / 5), y >> 1) < .07 && hash2(x0, y >> 1) < .5) return '#2e2a26';   // the black marks
+    return e < .15 ? '#fbfaf4' : e < .7 ? ((x + y) % 7 ? '#eeeae0' : '#e2ddd0') : e < .88 ? '#cfc9ba' : '#aaa496';
+  };
+  const barkImg = t => IMG[t.style === 'birch' ? 'bark-birch' : T.snow ? 'bark-winter' : 'bark-oak'];
+  T.barkUsed = barkPalette(IMG[T.snow ? 'bark-winter' : 'bark-oak'], T.bark);   // branch colours match the trunks
+  // trunks: a PixelLab bark texture if there is one, else bark ridges drawn here (birch: white with black marks)
+  for (const t of TRUNKS) {
+    const x0 = Math.round(t.cx - t.w / 2), top = t.style === 'pine' ? t.top - 70 : t.top, tex = barkImg(t);
+    if (tex) {
+      const th = tex.height;
+      for (let y = top; y <= GROUND + 2; y++) {
+        const flare = y > GROUND - 18 ? Math.floor((y - (GROUND - 18)) / 3) : 0, w = t.w + flare * 2;
+        const k = (y - top) % (th * 2), sy = k < th ? k : th * 2 - 1 - k;
+        g.drawImage(tex, Math.max(0, (tex.width - w) >> 1), sy, Math.min(w, tex.width), 1, x0 - flare, y, w, 1);
+      }
+      // round it: light down the left side, shadow down the right
+      g.globalAlpha = .18; g.fillStyle = '#ffffff'; g.fillRect(x0, top, 3, GROUND - top);
+      g.globalAlpha = .28; g.fillStyle = '#000000'; g.fillRect(x0 + t.w - 6, top, 6, GROUND - top); g.fillRect(x0 + t.w - 3, top, 3, GROUND - top);
+      g.globalAlpha = 1;
+      if (T.snow) for (let y = top; y < GROUND; y++) if (hash2(t.cx, y >> 3) < .25) { g.fillStyle = SNOW2; g.fillRect(x0, y, 2 + (hash2(y, 3) * 3 | 0), 1); }
+    } else for (let y = top; y <= GROUND + 2; y++) {
+      const flare = y > GROUND - 18 ? Math.floor((y - (GROUND - 18)) / 3) : 0;
+      for (let x = x0 - flare; x < x0 + t.w + flare; x++) {
+        const e = (x - x0) / t.w;
+        if (t.style === 'birch') { P(x, y, birchCol(e, x, y, x0)); continue; }
+        const ridge = hash2(x >> 1, Math.floor(y / (6 + hash2(x >> 1, 7) * 14)));
+        let k = e < .12 ? 0 : e < .3 ? 1 : e < .75 ? 2 : e < .9 ? 3 : 4;
+        if (k === 1 && ridge < .25) k = 2;
+        if (k === 2 && ridge < .22) k = 3;
+        if (k === 2 && ridge > .9) k = 1;
+        if (k === 0 && (x + y) % 3 === 0) k = 1;
+        let col = T.bark[k];
+        if (!T.snow && e < .35 && y > t.top + 30 && hash2(x >> 2, y >> 2) < .12 && hash2(x, y) < .7) col = '#6f9a3c';   // moss
+        if (T.snow && e < .2 && hash2(x >> 1, y >> 3) < .25) col = SNOW2;                                           // snow stuck to the bark
+        P(x, y, col);
+      }
+    }
+    if (t.style !== 'birch' && !tex) for (let k = 0; k < 3; k++) {   // knots
+      const kx = t.cx + (R() - .5) * t.w / 2, ky = t.top + 40 + R() * (GROUND - t.top - 90);
+      blob(g, WORLD_W, kx, ky, 3.5, (dx, dy, px, py, d) => d > .65 ? T.bark[4] : d > .3 ? T.bark[3] : T.bark[1]);
+    }
+    if (t.home) {   // a hollow in each home tree
+      const hx = t.cx, hy = GROUND - 64;
+      for (let y = hy - 20; y <= hy + 20; y++) for (let x = hx - 14; x <= hx + 14; x++) {
+        const d = Math.hypot((x + .5 - hx) / 11, (y + .5 - hy) / 17);
+        if (d < .78) P(x, y, y < hy - 6 ? '#120804' : y < hy + 6 ? '#1c0e06' : '#28150a');
+        else if (d < .9) P(x, y, T.bark[4]);
+        else if (d < 1.05) P(x, y, y > hy + 4 ? T.bark[0] : T.bark[3]);
+      }
+      // a little flag: red for you, grey for the other squirrel
+      const fx = hx + (t.home === 'you' ? 14 : -14), col = t.home === 'you' ? '#d0582a' : '#9aa0ab';
+      g.fillStyle = '#3d2414'; g.fillRect(fx, hy - 40, 2, 22);
+      g.fillStyle = col; for (let i = 0; i < 10; i++) g.fillRect(fx + (t.home === 'you' ? 2 : -i), hy - 40 + (i >> 1), t.home === 'you' ? 10 - i : i, 1);
+    }
+  }
+  // tree tops: PixelLab crowns if there are any; else round oaks, airy birches and fir cones drawn here; bare twigs in winter
+  const topImg = (t, i) => IMG[t.style === 'pine' ? 'top-winter' : t.style === 'birch' ? 'top-birch'
+    : season() === 'autumn' ? (i % 2 ? 'top-autumn-b' : 'top-autumn-a') : season() === 'spring' ? 'top-spring' : 'top-summer'];
+  // one big crown per tree (crown-*), or else a canopy built from four copies of a smaller one (top-*)
+  // The green and snowy crowns are the autumn oak (a) and maple (b) recoloured (art-src/recolor.py), so every season shares one look.
+  const crownKey = t => t.kind === 'Fir' ? 'winter' : t.kind === 'Maple' ? 'maple' : season() === 'autumn' ? 'autumn'
+    : t.kind === 'Bare' ? 'snow-b' : (t.kind === 'Birch' ? 'birch' : season() === 'spring' ? 'spring' : 'summer') + (t.shape ? '-b' : '-a');
+  const crownImg = t => IMG['crown-' + crownKey(t)];
+  // A back copy of a crown keeps only its leaves: in each column, the wood under the leaves (the trunk stub
+  // and the big limbs) is cleared from the bottom up, so it doesn't add trunks beside the real one.
+  // The leaves' own dark outline (wood-coloured, with a leaf right above it) stays.
+  const WOOD = new Set(['4a2216', '45232f', '916242', '855135', '674132', 'e8e4d8', 'cfc9ba', 'aaa496', '4a4640', '2e2a26']);
+  const leavesOnly = (cg, W, H) => {
+    let im; try { im = cg.getImageData(0, 0, W, H); } catch (e) { return; }   // no pixels from disk: leave it whole
+    const d = im.data, at = (x, y) => (y * W + x) * 4;
+    const wood = i => WOOD.has(((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]).toString(16).padStart(6, '0'));
+    for (let x = 0; x < W; x++) for (let y = H - 1; y >= 0; y--) {
+      const i = at(x, y); if (!d[i + 3]) continue;
+      if (!wood(i)) break;
+      if (y > 0 && d[at(x, y - 1) + 3] && !wood(at(x, y - 1))) break;
+      d[i + 3] = 0;
+    }
+    cg.putImageData(im, 0, 0);
+  };
+  const shadedCache = new Map();
+  const shaded = img => { if (!shadedCache.has(img)) { const c = makeCanvas(img.width, img.height), cg = c.getContext('2d');
+    cg.drawImage(img, 0, 0); leavesOnly(cg, c.width, c.height); cg.globalCompositeOperation = 'source-atop'; cg.globalAlpha = CANOPY_SHADE; cg.fillStyle = T.canopyShade || '#10281c'; cg.fillRect(0, 0, c.width, c.height);
+    shadedCache.set(img, c); } return shadedCache.get(img); };
+  TRUNKS.forEach((t, i) => {
+    t.shape = (i + LEVEL) % 2;
+    const big = crownImg(t);
+    if (big) {   // its bottom (with the stub of trunk) overlaps the top of the trunk
+      const sink = t.style === 'pine' ? 0.2 : 0.22, y = Math.round(t.top + big.height * sink - big.height);
+      const put = (img, dx, dy, flip) => { const x = Math.round(t.cx + dx - img.width / 2);
+        g.save(); if (flip) { g.translate(x * 2 + img.width, 0); g.scale(-1, 1); } g.drawImage(img, x, y + dy); g.restore(); };
+      if (t.style !== 'pine') {   // a fuller canopy: two shaded copies behind, lower and to the sides
+        const back = shaded(big), w = big.width * CANOPY_SPREAD, h = big.height * CANOPY_DROP;
+        put(back, -w, h, i % 2 === 0); put(back, w, h, i % 2 === 1);
+      }
+      put(big, 0, 0, i % 2 && t.style !== 'pine');
+      t.crowned = true; return;
+    }
+    const img = t.style !== 'bare' && topImg(t, i); if (!img) return;
+    const put = (dx, dy, flip) => {   // one copy of the crown, its bottom middle at (cx + dx, top + dy)
+      const x = Math.round(t.cx + dx - img.width / 2), y = Math.round(t.top + dy - img.height);
+      g.save(); if (flip) { g.translate(x * 2 + img.width, 0); g.scale(-1, 1); } g.drawImage(img, x, y); g.restore();
+    };
+    if (t.style === 'pine') put(0, img.height * 0.2, false);
+    else {   // a big canopy from several copies: back row first, then the front
+      const w = img.width, h = img.height, big = t.home ? 1.1 : 1;
+      put(-w * .42 * big, h * .2, false); put(w * .42 * big, h * .2, true);
+      put(0, -h * .28 * big, i % 2 === 0); put(0, h * .38, i % 2 === 1);
+    }
+    t.crowned = true;
+  });
+  for (const t of TRUNKS) {
+    if (t.crowned) continue;
+    if (t.style === 'pine') { firTree(g, WORLD_W, t.cx, t.top - 110, 150, 60, t.leaves.slice(1, 4), T.snow); continue; }
+    if (t.style === 'bare') {
+      for (let k = 0; k < 7; k++) {
+        const a = -Math.PI / 2 + (k - 3) * 0.32 + (R() - .5) * .2, len = 30 + R() * 34;
+        for (let s = 0; s < len; s++) {
+          const x = Math.round(t.cx + Math.cos(a) * s), y = Math.round(t.top + 4 + Math.sin(a) * s), w = s < len * .4 ? 3 : s < len * .75 ? 2 : 1;
+          g.fillStyle = T.bark[2]; g.fillRect(x - (w >> 1), y, w, 1);
+          if (T.snow && hash2(x, y) < .55) P(x, y - 1, SNOW);
+        }
+      }
+      continue;
+    }
+    const birch = t.style === 'birch', r = t.home ? 50 : birch ? 40 : 46, n = birch ? 15 : 11;
+    const blobs = [];
+    for (let k = 0; k < n; k++) {
+      const a = k / n * Math.PI * 2, rr = r * (birch ? .22 + R() * .2 : .35 + R() * .3);
+      blobs.push([t.cx + Math.cos(a) * r * (birch ? .7 : .62), t.top + Math.sin(a) * r * (birch ? .55 : .38) - 6 + (birch ? 8 : 0), rr]);
+    }
+    blobs.push([t.cx, t.top - 16, r * .5]);
+    if (birch) for (let k = 0; k < 6; k++) blobs.push([t.cx + (R() - .5) * r, t.top - 6 + (R() - .5) * r * .7, r * (.25 + R() * .15)]);   // fill the middle
+    blobs.sort((a, b) => b[1] - a[1]);
+    for (const [bx, by, br] of blobs) blob(g, WORLD_W, bx, by, br, leafy(t.leaves, {blossom: T.blossom, snow: T.snow}));
+  }
+  // branches: they grow out of the trunk's side with a thick collar and a shadow under the joint
+  for (const p of PLATS) {
+    if (p.ground) continue;
+    const t = TRUNKS[p.tree], dir = p.dir, birch = t.style === 'birch';
+    const edge = t.cx + dir * (t.w / 2 - 2);                 // starts just inside the bark
+    const tipX = dir > 0 ? p.x2 : p.x1, len = Math.abs(tipX - edge);
+    const B = birch ? ['#fbfaf4', '#e8e4d8', '#cfc9ba', '#8a857a', '#4a4640'] : T.barkUsed;
+    const art = branchArt(t.style === 'pine' || t.style === 'bare' ? 'fir' : t.style === 'birch' ? 'birch' : season() === 'birch' ? 'summer' : season());   // oaks in the birch wood get oak branches
+    if (art) {   // the PixelLab branch, stretched to this length and laid column by column along the walking line
+      // a collar where it grows out of the trunk: it widens (mostly downwards) and rounds into the bark
+      for (let i = -5; i < 16; i++) {
+        const x = Math.round(edge + dir * i), top = Math.round(pY(p, x)), k = clamp((16 - i) / 16, 0, 1);
+        const up = Math.round(k * k * 3), down = Math.round(k * k * 9), bottom = top + art.thick + down;
+        const span = bottom - (top - up), lower = Math.round(span * 0.45);   // lit from above: bark, then a shaded underside
+        g.fillStyle = art.bark; g.fillRect(x, top - up, 1, span - lower);
+        g.fillStyle = art.shade; g.fillRect(x, bottom - lower, 1, lower);
+        g.fillStyle = art.dark; g.fillRect(x, bottom, 1, 1);
+      }
+      for (let i = -4; i <= len; i++) {
+        const x = Math.round(edge + dir * i), sx = Math.round(art.xs + clamp(i / len, 0, 1) * (art.xe - art.xs));
+        g.drawImage(art.img, sx, 0, 1, art.img.height, x, Math.round(pY(p, x) - art.line(sx)), 1, art.img.height);
+      }
+      // its leaves: a cluster made from this tree's own crown, twig joined to the tip (and one hanging under long branches)
+      const cl = IMG['cluster-' + crownKey(t)];
+      // two tips from neighbouring trees that almost meet would get a mirrored pair of clusters: only the first gets one, the other stays a bare twig
+      const tipOf = q => q.dir > 0 ? q.x2 : q.x1;
+      const partner = PLATS.findIndex(q => !q.ground && q.tree !== p.tree && Math.abs(tipOf(q) - tipX) < TIP_SHARE && Math.abs(pY(q, tipOf(q)) - pY(p, tipX)) < TIP_SHARE / 3);
+      const nearTip = partner >= 0 && partner < PLATS.indexOf(p);
+      const bunch = k => IMG['bunch-' + crownKey(t) + '-' + k];
+      if (bunch(0)) {   // small leaf bunches cut from this tree's crown: one at the tip, smaller ones hanging under the branch
+        const put = (img, x, y, flip) => { x = Math.round(x - img.width / 2); y = Math.round(y);
+          g.save(); if (flip) { g.translate(x * 2 + img.width, 0); g.scale(-1, 1); } g.drawImage(img, x, y); g.restore(); };
+        const n = Math.floor((len - 26) / BUNCH_GAP);
+        for (let k = 0; k < n; k++) {
+          const d = len - 22 - k * BUNCH_GAP - hash2(p.x1, k) * 6, x = edge + dir * d, img = bunch(1 + (k + p.tree) % 2);
+          if (d < 22) break;
+          put(img, x, pY(p, x) + 2 + hash2(k, p.y1) * 3, hash2(p.y1, k) < .5);
+        }
+        if (!nearTip) { const img = bunch(0); put(img, tipX - dir * 4, pY(p, tipX) - img.height * 0.55, dir < 0); }
+      } else if (cl) {
+        const w = cl.width, h = cl.height;
+        const put = (x, y) => { g.save(); if (dir < 0) { g.translate(x * 2 + w, 0); g.scale(-1, 1); } g.drawImage(cl, x, y); g.restore(); };
+        if (!nearTip) put(Math.round(dir > 0 ? tipX - 6 : tipX - w + 6), Math.round(pY(p, tipX) - h * 0.6));
+        if (len > 110) { const mx = Math.round(edge + dir * len * 0.55); put(Math.round(mx - w / 2), Math.round(pY(p, mx) + 3)); }
+      }
+      continue;
+    }
+    for (let i = 0; i <= len; i++) {
+      const x = Math.round(edge + dir * i), top = Math.round(pY(p, x));
+      const fromTip = len - i, th = Math.round(clamp(6 + fromTip / len * 8, 6, 11));
+      const collar = i < 16 ? (16 - i) * (16 - i) / 16 : 0;   // widens into the trunk
+      const up = Math.round(collar * .25), down = Math.round(collar * .75);
+      for (let y = top - up; y <= top + th + down; y++) {
+        const r = (y - (top - up)) / (th + up + down);
+        let col = r < .12 ? B[0] : r < .5 ? B[1] : r < .82 ? B[2] : r < .95 ? B[3] : B[4];
+        if (birch && hash2(x >> 2, y) < .06) col = '#2e2a26';
+        else if (!birch && r > .2 && r < .8 && hash2(x, y >> 1) < .12) col = B[2];
+        P(x, y, col);
+      }
+      if (T.snow && hash2(x, 21) < .9) { P(x, top - up - 1, SNOW); if (hash2(x, 22) < .5) P(x, top - up - 2, SNOW2); }
+    }
+    // leaves at the tip and a few tufts underneath (needles in winter)
+    const tipY = pY(p, tipX);
+    const tuft = leafy(t.leaves, {blossom: T.blossom, snow: T.snow}), sprig = t.style !== 'bare' && IMG['leaf-' + season()];
+    if (sprig) {   // a PixelLab leafy sprig growing on out of the tip, and one hanging under long branches
+      const w = sprig.width, h = sprig.height;
+      const put = (x, y, flip) => { g.save(); if (flip) { g.translate(x * 2 + w, 0); g.scale(-1, 1); } g.drawImage(sprig, x, y); g.restore(); };
+      put(Math.round(dir > 0 ? tipX - 6 : tipX - w + 6), Math.round(tipY + 4 - h / 2), dir < 0);
+      if (len > 110) { const mx = Math.round(edge + dir * len * .5); put(Math.round(mx - w / 2), Math.round(pY(p, mx) + 7), dir > 0); }
+    } else if (t.style !== 'bare') {
+      blob(g, WORLD_W, tipX, tipY + 6, 9, tuft);
+      blob(g, WORLD_W, tipX - dir * 7, tipY + 12, 7, tuft);
+      for (let k = 0; k < Math.floor(len / 45); k++) {
+        const x = Math.round(edge + dir * (24 + R() * (len - 36))), y = Math.round(pY(p, x)) + 12;
+        blob(g, WORLD_W, x, y, 5 + R() * 3, tuft);
+      }
+    }
+  }
+  // on the ground: grass or a snow bank, flowers, bushes and decorations
+  const clear = (x, room) => !TRUNKS.some(t => Math.abs(t.cx - x) < t.w / 2 + room) && !MUSH.some(m => Math.abs(m.x - x) < 44) && x > 20 && x < WORLD_W - 20;
+  if (T.grass) for (let x = 0; x < WORLD_W; x += 2) if (hash2(x, 7) < .4) {
+    const h = 2 + (hash2(x, 8) * (T.tall ? 16 : 9) | 0); g.fillStyle = T.grass[hash2(x, 9) < .5 ? 0 : 1];
+    g.fillRect(x, GROUND - h + 2, 1, h); if (h > 6) g.fillRect(x + (hash2(x, 10) < .5 ? -1 : 1), GROUND - h + 3, 1, 2);
+  }
+  if (T.snow) for (let x = 0; x < WORLD_W; x++) {
+    const h = 2 + Math.round(2 * Math.sin(x / 23) + 1.5 * Math.sin(x / 7.3));
+    g.fillStyle = SNOW2; g.fillRect(x, GROUND - h + 2, 1, h); P(x, GROUND - h + 1, SNOW);
+  }
+  if (T.flowerGap) for (let x = 20; x < WORLD_W; x += T.flowerGap + (hash2(x, 11) * T.flowerGap | 0)) {
+    const col = T.flowers[hash2(x, 12) * T.flowers.length | 0], h = 6 + (hash2(x, 13) * (T.tall ? 10 : 4) | 0);
+    g.fillStyle = '#3f7d2c'; g.fillRect(x, GROUND - h, 1, h + 1);
+    g.fillStyle = col; g.fillRect(x - 1, GROUND - h - 2, 3, 1); g.fillRect(x, GROUND - h - 3, 1, 3);
+    g.fillStyle = '#ffb000'; g.fillRect(x, GROUND - h - 2, 1, 1);
+  }
+  const bushImg = IMG['bush-' + season()];   // PixelLab bush for this season (drawn in code if it's missing)
+  for (let x = 50 + R() * 60; x < WORLD_W - 30; x += T.bush.every * (0.7 + R() * 0.8)) {
+    if (!clear(x, 26)) continue;
+    if (bushImg) {
+      const flip = R() < .5, bx = Math.round(x - bushImg.width / 2), by = GROUND + 3 - bushImg.height;
+      g.save(); if (flip) { g.translate(bx * 2 + bushImg.width, 0); g.scale(-1, 1); } g.drawImage(bushImg, bx, by); g.restore();
+      continue;
+    }
+    if (T.bush.fern) { fern(g, x, GROUND + 2, T.bush.tones); continue; }
+    const look = leafy(T.bush.tones, {dots: T.bush.dots, snow: T.snow, ground: true});
+    blob(g, WORLD_W, x - 11, GROUND - 6, 13 + R() * 3, look);
+    blob(g, WORLD_W, x + 11, GROUND - 7, 14 + R() * 3, look);
+    blob(g, WORLD_W, x, GROUND - 14, 15 + R() * 3, look);
+  }
+  const decorAt = [];
+  for (const kind of T.decor) {
+    for (let tries = 0; tries < 30; tries++) {
+      const x = Math.round(30 + R() * (WORLD_W - 60));
+      if (!clear(x, 30) || decorAt.some(d => Math.abs(d - x) < 50)) continue;
+      decorAt.push(x); decor(g, kind, x, GROUND + 1, T, R); break;
+    }
+  }
+  if (T.worldTint) { g.globalCompositeOperation = 'source-atop'; g.globalAlpha = T.worldTint[1]; g.fillStyle = T.worldTint[0]; g.fillRect(0, 0, WORLD_W, WORLD_H); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+  return c;
+}
+function fern(g, x, y, tones) {
+  for (let f = 0; f < 7; f++) {
+    const a = -Math.PI / 2 + (f - 3) * 0.38, len = 18 + (f % 3) * 5;
+    for (let s = 0; s < len; s++) {
+      const bend = s * s / len * 0.02 * (f - 3);
+      const px = Math.round(x + Math.cos(a) * s + bend * 8), py = Math.round(y + Math.sin(a) * s + s * s / len * 0.25);
+      g.fillStyle = tones[2]; g.fillRect(px, py, 1, 1);
+      if (s % 3 === 0 && s > 2) { g.fillStyle = tones[f % 2]; g.fillRect(px - 2, py + 1, 2, 1); g.fillRect(px + 1, py + 1, 2, 1); }
+    }
+  }
+}
+function decor(g, kind, x, y, T, R) {
+  const P = (px, py, col) => { g.fillStyle = col; g.fillRect(px, py, 1, 1); };
+  const ell = (cx, cy, rx, ry, colorAt) => {
+    for (let py = Math.floor(cy - ry); py <= cy + ry; py++) for (let px = Math.floor(cx - rx); px <= cx + rx; px++) {
+      const dx = (px + .5 - cx) / rx, dy = (py + .5 - cy) / ry; if (dx * dx + dy * dy > 1) continue;
+      const col = colorAt(dx, dy, px, py); if (col) P(px, py, col);
+    }
+  };
+  if (kind === 'mushroom' && IMG['mushroom-small']) {
+    const m = IMG['mushroom-small']; g.drawImage(m, Math.round(x - m.width / 2), y + 1 - m.height);
+  } else if (kind === 'mushroom') {
+    ell(x, y - 8, 4, 8, (dx) => dx > .3 ? '#d8ccb0' : '#f2ead8');
+    ell(x, y - 16, 11, 7, (dx, dy, px, py) => dy > .45 ? null : hash2(px >> 1, py >> 1) < .12 ? '#ffffff' : dy < -.4 ? '#ff6a5a' : '#e0402e');
+  } else if (kind === 'fern') {
+    fern(g, x, y + 1, T.bush.tones);
+  } else if (kind === 'snowpile') {
+    ell(x, y - 2, 22, 9, (dx, dy) => dy > .2 ? null : dx < -.2 && dy < -.3 ? '#ffffff' : '#dfe8f6');
+  } else if (kind === 'snowman') {
+    ell(x, y - 10, 11, 10, (dx, dy) => dx > .45 ? '#c8d4ea' : '#f4f8ff');
+    ell(x, y - 26, 8, 8, (dx, dy) => dx > .45 ? '#c8d4ea' : '#ffffff');
+    P(x - 3, y - 28, '#202020'); P(x + 2, y - 28, '#202020');
+    g.fillStyle = '#f08020'; g.fillRect(x, y - 26, 5, 2);
+    g.fillStyle = '#c03030'; g.fillRect(x - 8, y - 19, 16, 3); g.fillRect(x + 4, y - 19, 3, 8);
+    P(x, y - 12, '#202020'); P(x, y - 8, '#202020');
+    g.fillStyle = '#5a3a20'; for (let i = 0; i < 10; i++) { P(x - 10 - i, y - 14 - (i >> 1), '#5a3a20'); P(x + 10 + i, y - 14 - (i >> 1), '#5a3a20'); }
+  }
+}
+
+/* ======== route finding: run along branches, climb trunks, leap between branch tips ======== */
+function node(pi, x) {
+  const p = PLATS[pi]; x = clamp(x, p.x1, p.x2);
+  let n = NODES.find(n => n.p === pi && Math.abs(n.x - x) < 1);
+  if (!n) { n = {p: pi, x, y: pY(p, x), id: NODES.length}; NODES.push(n); }
+  return n;
+}
+const jumpDur = (a, b) => 0.3 + Math.hypot(b.x - a.x, b.y - a.y) / 420;
+const bounceDur = (a, b) => 0.7 + Math.abs(b.x - a.x) / 400;
+function buildRoutes() {
+  NODES = []; LINKS = [];
+  PLATS.forEach((p, i) => { node(i, p.x1); node(i, p.x2); });
+  for (const t of TRUNKS) {
+    const at = [];
+    PLATS.forEach((p, i) => {
+      if (p.ground) at.push(node(i, t.cx));
+      else if (Math.abs(p.x1 - t.cx) < 1) at.push(node(i, p.x1));
+      else if (Math.abs(p.x2 - t.cx) < 1) at.push(node(i, p.x2));
+    });
+    at.sort((a, b) => a.y - b.y);
+    for (let k = 0; k + 1 < at.length; k++) {
+      LINKS.push({a: at[k], b: at[k + 1], kind: 'climb', trunk: t});
+      LINKS.push({a: at[k + 1], b: at[k], kind: 'climb', trunk: t});
+    }
+  }
+  // is another branch in the way between two heights at x?
+  const blocked = (x, y0, y1, skip) => PLATS.some((c, i) => !skip.includes(i) && x >= c.x1 && x <= c.x2 && pY(c, x) > y0 + 1 && pY(c, x) < y1 - 1);
+  PLATS.forEach((A, ai) => {
+    if (A.ground) return;
+    for (const [ex, dir] of [[A.x1, -1], [A.x2, 1]]) {
+      if (atTrunk(ex)) continue;
+      const p = node(ai, ex);
+      PLATS.forEach((B, bi) => {
+        if (bi === ai) return;
+        const sx = ex + dir * 16; let qx;
+        if (sx >= B.x1 + 6 && sx <= B.x2 - 6) qx = sx;
+        else { qx = dir > 0 ? B.x1 + 6 : B.x2 - 6; if ((qx - ex) * dir <= 0) return; }
+        const qy = pY(B, qx), dx = Math.abs(qx - ex), dy = qy - p.y;
+        if (dx > JUMP_DX || dy < -JUMP_UP || (dx < 8 && Math.abs(dy) < 6)) return;
+        if (blocked(qx, Math.min(p.y, qy), Math.max(p.y, qy), [ai, bi])) return;
+        const q = node(bi, qx);
+        LINKS.push({a: p, b: q, kind: 'jump'});
+        if (dy <= JUMP_UP) LINKS.push({a: q, b: p, kind: 'jump'});
+      });
+    }
+  });
+  // bouncy mushrooms throw you up to the highest branch point in reach
+  for (const m of MUSH) {
+    const g = node(GROUND_P, m.x); m.node = g;
+    let best = null;
+    for (const n of NODES) if (n.p !== GROUND_P && !atTrunk(n.x) && Math.abs(n.x - m.x) < 140 && GROUND - n.y < BOUNCE_UP && (!best || n.y < best.y)) best = n;
+    if (best) LINKS.push({a: g, b: best, kind: 'bounce', mush: m});
+  }
+}
+// Builds the graph with some extra points (where a squirrel stands, where nuts lie) added on their branches.
+function graph(extra) {
+  const nodes = NODES.slice();
+  const tn = extra.map(e => { const p = PLATS[e.p], x = clamp(e.x, p.x1, p.x2), n = {p: e.p, x, y: pY(p, x), id: nodes.length}; nodes.push(n); return n; });
+  const adj = nodes.map(() => []);
+  const byPlat = PLATS.map(() => []); nodes.forEach(n => byPlat[n.p].push(n));
+  for (const list of byPlat) {
+    list.sort((a, b) => a.x - b.x);
+    for (let k = 0; k + 1 < list.length; k++) {
+      const a = list[k], b = list[k + 1], cost = Math.abs(b.x - a.x) / WALK;
+      adj[a.id].push({to: b, cost, kind: 'walk'}); adj[b.id].push({to: a, cost, kind: 'walk'});
+    }
+  }
+  for (const l of LINKS) adj[l.a.id].push({to: l.b, kind: l.kind, trunk: l.trunk, mush: l.mush,
+    cost: l.kind === 'climb' ? Math.abs(l.b.y - l.a.y) / CLIMB : l.kind === 'bounce' ? bounceDur(l.a, l.b) + 0.1 : jumpDur(l.a, l.b) + 0.12});
+  return {nodes, adj, tn};
+}
+function dijkstra(G, src) {
+  const n = G.nodes.length, dist = new Float64Array(n).fill(Infinity), prev = new Array(n), done = new Uint8Array(n);
+  dist[src.id] = 0;
+  for (;;) {
+    let u = -1, best = Infinity;
+    for (let i = 0; i < n; i++) if (!done[i] && dist[i] < best) { best = dist[i]; u = i; }
+    if (u < 0) break;
+    done[u] = 1;
+    for (const e of G.adj[u]) { const d = best + e.cost; if (d < dist[e.to.id]) { dist[e.to.id] = d; prev[e.to.id] = {from: G.nodes[u], e}; } }
+  }
+  return {dist, prev};
+}
+function routeTo(D, goal) {
+  const steps = [];
+  for (let n = goal; D.prev[n.id]; n = D.prev[n.id].from) {
+    const {from, e} = D.prev[n.id];
+    steps.unshift({kind: e.kind, a: from, b: n, trunk: e.trunk, mush: e.mush});
+  }
+  return steps;
+}
+
+/* ======== sound: synthesized effects, recorded voice ======== */
+let AC = null, out = null, sfxBus = null, voiceBus = null, noiseBuf = null, muted = store.get('muted', false);
+const CLIPS = {};
+// Every spoken line; assets/say-<key>.mp3, or the device voice if a clip can't load.
+// The voice helps a child learn English: it says what the squirrels are doing, in simple sentences.
+const LINES = {
+  level1: 'Level one. It is spring. It is morning.', level2: 'Level two. It is summer. The sun is high.',
+  level3: 'Level three. Look at the white trees.', level4: 'Level four. It is autumn. The leaves are orange.',
+  level5: 'Level five. It is winter. Look at the snow and the stars!',
+  level6: 'Level six. It is night. Look at the fireflies!', level7: 'Level seven. It is raining. Look, a rainbow!',
+  level8: 'Level eight. It is a cold night. Look at the lights in the sky!',
+  three: 'Three!', two: 'Two!', one: 'One!', go: 'Go!',
+  tap: 'Tap where you want to go!',
+  runYou: 'The red squirrel is running.', upYou: 'The red squirrel is climbing up the tree.', downYou: 'The red squirrel is climbing down the tree.',
+  jumpYou: 'The red squirrel is jumping.', bounceYou: 'Boing! The red squirrel is bouncing up.', waitYou: 'The red squirrel is waiting. Tap a nut!',
+  // several ways to say the same thing, to learn different verbs
+  acornYou1: 'The red squirrel found an acorn.', acornYou2: 'The red squirrel got an acorn.',
+  acornYou3: 'The red squirrel picked up an acorn.', acornYou4: 'The red squirrel grabbed an acorn.',
+  walnutYou1: 'The red squirrel found a big walnut.', walnutYou2: 'The red squirrel picked up a big walnut.',
+  goldenYou: 'Wow! The red squirrel found a golden acorn!',
+  berriesYou: 'The red squirrel is eating berries. Now it is fast!',
+  upAi: 'The grey squirrel is climbing up the tree.', jumpAi: 'The grey squirrel is jumping.', acornAi1: 'The grey squirrel found an acorn.', acornAi2: 'The grey squirrel got an acorn.', acornAi3: 'The grey squirrel picked up an acorn.',
+  berriesAi: 'The grey squirrel is eating berries. Now it is fast!',
+  treeOak: 'The red squirrel is climbing an oak tree.', treeBirch: 'The red squirrel is climbing a birch tree.',
+  treeMaple: 'The red squirrel is climbing a maple tree.', treeFir: 'The red squirrel is climbing a fir tree.',
+  treeBare: 'This tree has no leaves in winter. The red squirrel is climbing up.',
+  falling: 'A nut is falling from the tree.', goldenDrop: 'Look! A golden acorn is falling!',
+  win: 'You win!', tie: "It's a tie!", lose: 'Grey wins this time. Try again!', allDone: 'You won every level! Hooray!',
+};
+const NARRATE_GAP = 2.5;   // seconds of quiet before the voice describes the next thing
+// a describing line, only when nothing else has been said for a moment
+function narrate(key, gap = NARRATE_GAP) { if (AC && !muted && AC.currentTime > talkUntil + gap) say(key, 1); }
+function audio() {
+  if (!AC) {
+    try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    out = AC.createGain(); out.gain.value = muted ? 0 : 1; out.connect(AC.destination);   // everything goes through here, so mute is one switch
+    sfxBus = AC.createGain(); sfxBus.gain.value = SFX_VOL; sfxBus.connect(out);
+    // voice: each clip is evened out to the same level, then a gentle compressor keeps it steady
+    const comp = AC.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.knee.value = 6; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.2;
+    voiceBus = AC.createGain(); voiceBus.gain.value = VOICE_VOL;
+    comp.connect(voiceBus).connect(out);
+    voiceBus.input = comp;
+    noiseBuf = AC.createBuffer(1, AC.sampleRate * 0.3, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    loadClips();
+  }
+  if (AC.state === 'suspended') AC.resume();
+}
+// The clip files start downloading as soon as the page opens; they're decoded once the first tap unlocks audio.
+// Until a clip is ready, say() waits for it, so the device's own voice is only used when a clip really can't load.
+const CLIP_FILES = {};
+for (const key of Object.keys(LINES)) CLIP_FILES[key] = fetch(`assets/say-${key}.mp3?v=${ASSET_V}`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); });
+const CLIP_READY = {};
+function loadClips() {
+  for (const key of Object.keys(LINES)) {
+    CLIP_READY[key] = CLIP_FILES[key]
+      .then(b => new Promise((ok, no) => AC.decodeAudioData(b.slice(0), ok, no)))
+      .then(buf => { let peak = 0.01; for (let c = 0; c < buf.numberOfChannels; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i += 4) peak = Math.max(peak, Math.abs(d[i])); }
+        CLIPS[key] = {buf, gain: Math.min(4, 0.8 / peak)}; })
+      .catch(() => { CLIPS[key] = null; });   // null = can't load: use the device voice
+  }
+}
+let talking = null, talkUntil = 0, talkPrio = 0;
+// prio: 1 = chatter (skipped if something is being said), 2 = news (waits its turn), 3 = must say now
+function say(key, prio = 2) {
+  if (!AC || muted) return;
+  if (CLIPS[key] === undefined && CLIP_READY[key]) {   // still on its way: say it when it arrives (if that's soon)
+    const asked = performance.now();
+    CLIP_READY[key].then(() => { if (performance.now() - asked < (prio >= 2 ? 6000 : 2000)) say(key, prio); });   // slow phones: news can wait longer than chatter
+    return;
+  }
+  const now = AC.currentTime;
+  if (now < talkUntil) {
+    if (prio === 1 || prio < talkPrio) return;
+    if (prio === 2) { setTimeout(() => say(key, 2), (talkUntil - now) * 1000 + 80); talkPrio = 2; return; }
+    try { talking && talking.stop(); } catch (e) {} try { speechSynthesis.cancel(); } catch (e) {}
+  }
+  talkPrio = prio;
+  const clip = CLIPS[key];
+  if (clip) {
+    const s = AC.createBufferSource(), g = AC.createGain();
+    s.buffer = clip.buf; g.gain.value = clip.gain; s.connect(g).connect(voiceBus.input); s.start();
+    talking = s; talkUntil = now + clip.buf.duration;
+    sfxBus.gain.setTargetAtTime(SFX_VOL * 0.4, now, 0.05); sfxBus.gain.setTargetAtTime(SFX_VOL, now + clip.buf.duration, 0.15);
+    Music.duck(clip.buf.duration);
+  } else {
+    try {
+      const u = new SpeechSynthesisUtterance(LINES[key]); u.lang = 'en-GB'; u.rate = 0.8; u.volume = 1;
+      speechSynthesis.speak(u); talkUntil = now + 0.25 + LINES[key].length * 0.07; Music.duck(talkUntil - now);
+    } catch (e) {}
+  }
+}
+function blip(type, f0, f1, dur, vol, delay = 0) {
+  if (!AC) return;
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(sfxBus); o.start(t); o.stop(t + dur + 0.03);
+}
+function noise(dur, vol, freq) {
+  if (!AC) return;
+  const t = AC.currentTime, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f).connect(g).connect(sfxBus); s.start(t); s.stop(t + dur);
+}
+/* ======== music: an Eleven Music track per season ========
+   Each season's track downloads when its level is loaded, is decoded on the first tap, and loops without a seam
+   (its last MUSIC_XFADE seconds are blended into its start). If it can't load, the chiptune below plays instead. */
+const TRACK_FILES = {}, TRACKS = {}, TRACK_READY = {};
+function fetchTrack(theme) {
+  if (!TRACK_FILES[theme]) TRACK_FILES[theme] = fetch(`assets/music-${theme}.mp3?v=${ASSET_V}`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); });
+}
+function decodeTrack(theme) {
+  fetchTrack(theme);
+  if (!TRACK_READY[theme]) TRACK_READY[theme] = TRACK_FILES[theme]
+    .then(b => new Promise((ok, no) => AC.decodeAudioData(b.slice(0), ok, no)))
+    .then(buf => { TRACKS[theme] = loopable(buf); }).catch(() => { TRACKS[theme] = null; });
+  return TRACK_READY[theme];
+}
+function loopable(buf) {
+  const X = Math.floor(MUSIC_XFADE * buf.sampleRate), L = buf.length - X;
+  const b = AC.createBuffer(buf.numberOfChannels, L, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c), o = b.getChannelData(c);
+    o.set(d.subarray(0, L));
+    for (let i = 0; i < X; i++) { const u = i / X; o[i] = d[i] * Math.sin(u * Math.PI / 2) + d[L + i] * Math.cos(u * Math.PI / 2); }   // equal-power blend
+  }
+  return b;
+}
+const Music = {
+  bus: null, src: null, srcGain: null, on: false, chip: false,
+  start() {
+    if (this.on || !AC) return; this.on = true;
+    if (!this.bus) { this.bus = AC.createGain(); this.bus.gain.value = 1; this.bus.connect(out); }
+    const theme = season();
+    decodeTrack(theme).then(() => {
+      if (!this.on || season() !== theme || this.src || this.chip) return;
+      const buf = TRACKS[theme];
+      if (!buf) { this.chip = true; Chip.start(); return; }
+      const t = AC.currentTime, src = AC.createBufferSource(), g = AC.createGain();
+      src.buffer = buf; src.loop = true; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(MUSIC_VOL, t + 1);
+      src.connect(g).connect(this.bus); src.start(); this.src = src; this.srcGain = g;
+    });
+  },
+  stop(fade = 0.6) {
+    this.on = false;
+    if (this.chip) { Chip.stop(fade); this.chip = false; }
+    if (this.src) {
+      const src = this.src, g = this.srcGain.gain, t = AC.currentTime;
+      g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t); g.exponentialRampToValueAtTime(0.0001, t + fade);
+      setTimeout(() => { try { src.stop(); } catch (e) {} }, fade * 1000 + 100); this.src = null;
+    }
+  },
+  duck(secs) {   // dip under a spoken line, then come back up
+    if (this.chip) Chip.duck(secs);
+    if (!this.bus) return; const g = this.bus.gain, t = AC.currentTime;
+    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t);
+    g.exponentialRampToValueAtTime(MUSIC_DUCK, t + 0.1); g.setValueAtTime(MUSIC_DUCK, t + secs); g.exponentialRampToValueAtTime(1, t + secs + 0.5);
+  },
+  speed(zoom) { if (this.src) this.src.playbackRate.setTargetAtTime(zoom ? MUSIC_ZOOM : 1, AC.currentTime, 0.3); },
+};
+
+/* ======== fallback music: a bouncy 8-bar chiptune made in the browser ========
+   A lookahead scheduler queues each 16th note ~0.15 s ahead of the audio clock (Robot Spy's Music is the model).
+   Chords C, Am, F, G twice; the tune is written out below, one MIDI note per 8th (0 = rest). */
+const MUSIC_CHORDS = [
+  {bass: 36, arp: [60, 64, 67, 72]}, {bass: 33, arp: [57, 60, 64, 69]}, {bass: 41, arp: [57, 60, 65, 69]}, {bass: 43, arp: [55, 59, 62, 67]},
+];
+const MUSIC_TUNE = [
+  [76, 79, 81, 79, 76, 72, 74, 76], [72, 0, 69, 0, 72, 74, 76, 0], [77, 81, 84, 81, 77, 81, 79, 77], [74, 79, 83, 79, 74, 0, 0, 0],
+  [76, 79, 84, 79, 76, 79, 81, 79], [81, 84, 81, 76, 81, 79, 76, 74], [72, 74, 76, 77, 76, 74, 72, 74], [79, 0, 83, 0, 86, 0, 0, 0],
+];
+const MUSIC_KEY = [0, 2, -1, 3, -3];   // each level plays it in its own key
+const midiHz = m => 440 * 2 ** ((m - 69) / 12);
+const Chip = {
+  bus: null, timer: 0, step: 0, next: 0, on: false,
+  start() {
+    if (this.on || !AC) return;
+    if (!this.bus) { this.bus = AC.createGain(); this.bus.gain.value = 0.0001; this.bus.connect(out); }
+    const g = this.bus.gain, t = AC.currentTime;
+    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t); g.exponentialRampToValueAtTime(CHIP_VOL, t + 1);
+    this.on = true; this.step = 0; this.next = t + 0.1;
+    this.timer = setInterval(() => this.schedule(), 25);
+  },
+  stop(fade = 0.6) {
+    if (!this.on) return; this.on = false; clearInterval(this.timer);
+    const g = this.bus.gain, t = AC.currentTime;
+    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t); g.exponentialRampToValueAtTime(0.0001, t + fade);
+  },
+  duck(secs) {   // dip under a spoken line, then come back up
+    if (!this.on) return; const g = this.bus.gain, t = AC.currentTime;
+    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t);
+    g.exponentialRampToValueAtTime(CHIP_VOL * MUSIC_DUCK, t + 0.1);
+    g.setValueAtTime(CHIP_VOL * MUSIC_DUCK, t + secs); g.exponentialRampToValueAtTime(CHIP_VOL, t + secs + 0.5);
+  },
+  schedule() {
+    if (this.next < AC.currentTime - 0.05) this.next = AC.currentTime + 0.05;   // timer was held up: skip missed notes rather than play them in a burst
+    const zoom = you && you.zoom > 0 ? 1.12 : 1;   // the tune speeds up while you zoom
+    while (this.next < AC.currentTime + 0.15) {
+      this.play(this.step, this.next);
+      this.next += 60 / ((MUSIC_BPM + LEVEL * MUSIC_BPM_STEP) * zoom) / 4;
+      this.step++;
+    }
+  },
+  play(i, t) {
+    const s = i % 16, bar = Math.floor(i / 16) % 8, ch = MUSIC_CHORDS[bar % 4], k = MUSIC_KEY[LEVEL] || 0;
+    if (s === 0 || s === 8) this.note(150, t, 0.14, 'sine', 0.5, 0, 45);                      // kick
+    if (s === 4 || s === 12) this.hit(t, 0.07, 0.12, 1800);                                    // snare
+    if (s % 2 === 1) this.hit(t, 0.025, 0.04, 7000);                                           // hi-hat
+    if (s % 4 === 0 || s === 6 || s === 14) this.note(midiHz(ch.bass + k + (s === 6 || s === 14 ? 12 : 0)), t, 0.16, 'triangle', 0.32);   // bouncy bass
+    this.note(midiHz(ch.arp[s % 4] + k + 12), t, 0.06, 'square', 0.025, 2200);               // sparkly arpeggio
+    if (s % 2 === 0) { const m = MUSIC_TUNE[bar][s / 2]; if (m) this.note(midiHz(m + k), t, 0.2, 'square', 0.06, 3000); }   // the tune
+  },
+  note(f, t, d, type, v, cutoff = 0, f2 = 0) {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    let node = o;
+    if (cutoff) { const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff; o.connect(lp); node = lp; }
+    node.connect(g).connect(this.bus); o.start(t); o.stop(t + d + 0.03);
+  },
+  hit(t, d, v, freq) {
+    const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+    src.buffer = noiseBuf; f.type = freq > 5000 ? 'highpass' : 'bandpass'; f.frequency.value = freq;
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    src.connect(f).connect(g).connect(this.bus); src.start(t); src.stop(t + d + 0.02);
+  },
+};
+document.addEventListener('visibilitychange', () => {   // background tabs throttle timers, so pause rather than stutter
+  if (document.hidden) Music.stop(0.2); else if (phase === 'play') Music.start();
+});
+function setMuted(m) {
+  muted = m; store.set('muted', m);
+  if (out) out.gain.setTargetAtTime(m ? 0 : 1, AC.currentTime, 0.05);
+  if (m) { try { speechSynthesis.cancel(); } catch (e) {} }
+  const b = document.getElementById('mute'); b.classList.toggle('off', m); b.setAttribute('aria-label', m ? 'Sound on' : 'Sound off');
+}
+const NOTES = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349];
+const SFX = {
+  tap: () => blip('sine', 700, 900, 0.06, 0.1),
+  jump: () => blip('square', 330, 660, 0.1, 0.06),
+  boing: () => { blip('sine', 150, 640, 0.18, 0.3); blip('sine', 640, 320, 0.2, 0.15, 0.17); },
+  scratch: () => noise(0.03, 0.1, 2500),
+  got: k => { const f = NOTES[Math.min(k, NOTES.length - 1)]; blip('triangle', f, null, 0.25, 0.25); blip('sine', f * 2, null, 0.18, 0.1, 0.05); },
+  golden: () => [1047, 1319, 1568, 2093].forEach((f, i) => blip('triangle', f, null, 0.2, 0.2, i * 0.07)),
+  greyGot: () => blip('triangle', 330, 262, 0.18, 0.14),
+  zoom: () => blip('sawtooth', 200, 1200, 0.35, 0.08),
+  rustle: () => noise(0.25, 0.14, 1800),
+  thud: () => noise(0.06, 0.12, 400),
+  count: hi => blip('square', hi ? 880 : 440, null, hi ? 0.35 : 0.15, 0.1),
+  win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => blip('square', f, null, 0.2, 0.1, i * 0.12)),
+  lose: () => [523, 440, 392, 523].forEach((f, i) => blip('triangle', f, null, 0.22, 0.14, i * 0.15)),
+};
+
+/* ======== canvas and scaling ======== */
+const cvs = document.getElementById('game'), ctx = cvs.getContext('2d');
+let vw = 640, vh = 360, scale = 1, dpr = 1, skyC = null, skyFor = '', floorC = null, floorCtx = null, floorImg = null, floor32 = null;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+  if (!W || !H) return;   // hidden or mid-rotation; a later resize event fills it in
+  scale = Math.max(1, Math.min(Math.round(Math.min(W, H) / VIEW_MIN), Math.floor(W / VIEW_MIN_W)));
+  vw = Math.ceil(W / scale); vh = Math.ceil(H / scale);
+  cvs.width = vw; cvs.height = vh;
+  cvs.style.width = (vw * scale / dpr) + 'px'; cvs.style.height = (vh * scale / dpr) + 'px';
+  ctx.imageSmoothingEnabled = false;
+  floorC = makeCanvas(vw, 400); floorCtx = floorC.getContext('2d');
+  floorImg = floorCtx.createImageData(vw, 400); floor32 = new Uint32Array(floorImg.data.buffer);
+  skyFor = ''; buildSky();
+  snapCamera();
+}
+// sky: banded 80s gradient with dithered seams, horizon at the bottom (and stars at dusk)
+function buildSky() {
+  if (!floorC || skyFor === LV.theme + vw) return;
+  skyFor = LV.theme + vw;
+  const S = THEMES[LV.theme], B = S.bands, SH = 560, bh = SH / B.length; skyC = makeCanvas(vw, SH); const g = skyC.getContext('2d');
+  B.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, Math.floor(i * bh), vw, Math.ceil(bh) + 1); });
+  for (let i = 1; i < B.length; i++) {
+    const yb = Math.floor(i * bh);
+    for (let x = 0; x < vw; x++) {
+      if (x % 2 === 0) { g.fillStyle = B[i]; g.fillRect(x, yb - 2, 1, 1); g.fillRect(x + 1, yb - 6, 1, 1); }
+      if (x % 2 === 1) { g.fillStyle = B[i - 1]; g.fillRect(x, yb + 1, 1, 1); }
+      if (x % 4 === 0) { g.fillStyle = B[i]; g.fillRect(x, yb - 4, 1, 1); g.fillRect(x + 2, yb - 9, 1, 1); }
+    }
+  }
+  if (S.aurora) for (let x = 0; x < vw; x++) {   // northern lights: soft green and violet curtains, in pixel columns
+    const top = SH * .06 + Math.sin(x / 70) * 30 + Math.sin(x / 23 + 1) * 10, len = 140 + Math.sin(x / 41 + 2) * 50;
+    for (let y = 0; y < len; y += 2) {
+      const t = y / len; g.globalAlpha = Math.min(1, (1 - t) * 1.6) * .6 * (0.65 + 0.35 * Math.sin(x / 9));
+      g.fillStyle = t < .2 ? '#b8ffd8' : t < .6 ? '#4ef0a0' : '#7a6cf0'; g.fillRect(x, Math.round(top + y), 1, 2);
+    }
+    g.globalAlpha = 1;
+  }
+  if (S.rainbow) {   // a rainbow behind the clouds
+    const cx = vw * .62, cy = SH * .78, cols = ['#e85a5a', '#f0a040', '#f4e060', '#6cc86c', '#58a8e8', '#8a6ad8'];
+    g.globalAlpha = .55;
+    for (let y = 0; y < SH; y++) for (let x = 0; x < vw; x++) {
+      const k = Math.floor((Math.hypot(x - cx, (y - cy) * 1.1) - 220) / 6); if (k < 0 || k >= cols.length) continue;
+      g.fillStyle = cols[k]; g.fillRect(x, y, 1, 1);
+    }
+    g.globalAlpha = 1;
+  }
+  if (S.stars) for (let i = 0; i < vw * 0.12; i++) { const x = Math.random() * vw | 0, y = Math.random() * SH * .6 | 0; g.fillStyle = Math.random() < .3 ? '#ffffff' : '#c8d0ff'; g.fillRect(x, y, 1, 1); }
+}
+
+/* ======== game state ======== */
+let round = 0, you, ai, squirrels, nuts, parts, flyers, deck, time = 0, phase = 'start', dropTimer = 0, endAt = 0, tapped = false, grabs = 0;
+const cam = {x: 0, y: 0};
+let prevCam = {x: 0, y: 0};
+
+function makeSquirrel(who, x) {
+  return {who, p: GROUND_P, x, y: GROUND, face: who === 'you' ? 1 : -1, mul: who === 'ai' ? LV.ai.speed * AI_EASE : 1,
+    steps: [], cur: null, mode: 'idle', trail: [], trick: null, nextTrick: 2, anim: 0, score: 0, shown: 0, got: [], think: 1, goal: null, marker: null, scratch: 0, zoom: 0};
+}
+function newGame(level) {
+  loadLevel(level); buildSky();
+  const homeX = who => TRUNKS.find(t => t.home === who).cx;
+  you = makeSquirrel('you', homeX('you') + 46); ai = makeSquirrel('ai', homeX('ai') - 46); squirrels = [ai, you];
+  nuts = []; parts = []; flyers = []; endAt = 0; tapped = false; grabs = 0; hint = null; hintT = 0;
+  // the deck: every nut and berry of this round, in the order they appear
+  const mixed = () => { const w = Object.entries(LV.mix), sum = w.reduce((s, [, v]) => s + v, 0); let r = Math.random() * sum; for (const [k, v] of w) if ((r -= v) < 0) return k; return 'acorn'; };
+  const start = Array.from({length: LV.nuts.start}, mixed);
+  const drops = Array.from({length: LV.nuts.drop - LV.golden - LV.berries}, mixed);
+  for (let i = 0; i < LV.golden; i++) drops.splice(Math.floor(drops.length * (i + 1) / (LV.golden + 1)), 0, 'golden');
+  for (let i = 0; i < LV.berries; i++) drops.splice(Math.floor(drops.length * (i + 0.5) / LV.berries), 0, 'berries');
+  deck = drops; dropTimer = LV.nuts.every || 1;
+  const branches = PLATS.map((p, i) => i).filter(i => !PLATS[i].ground);
+  for (let tries = 0; start.length && tries < 800; tries++) {
+    const pi = pick(branches), p = PLATS[pi], x = rand(p.x1 + 12, p.x2 - 12);
+    if (atTrunk(p.x1) && x < p.x1 + 26 || atTrunk(p.x2) && x > p.x2 - 26) continue;
+    if (nuts.some(n => Math.hypot(n.x - x, n.y - pY(p, x)) < 40)) continue;
+    addNut(start.pop(), pi, x);
+  }
+  updateScore(true);
+  document.getElementById('end').hidden = true;
+  snapCamera();
+}
+function nutHalf(type) { const i = nutImg(type); return i ? i.height / 2 : 8; }
+function addNut(type, pi, x) { nuts.push({type, p: pi, x, y: pY(PLATS[pi], x) - nutHalf(type) + 1, vy: 0, state: 'rest', ang: 0, born: time}); }
+// A nut drops out of a treetop and lands on the first branch below it.
+function dropNut() {
+  const type = deck.shift(), t = pick(TRUNKS);
+  const x = clamp(t.cx + rand(-48, 48), 12, WORLD_W - 12), y0 = t.top;
+  let pi = GROUND_P, best = GROUND;
+  PLATS.forEach((p, i) => { if (!p.ground && x >= p.x1 + 4 && x <= p.x2 - 4) { const y = pY(p, x); if (y > y0 + 12 && y < best) { best = y; pi = i; } } });
+  nuts.push({type, p: pi, x, y: y0, vy: 0, state: 'fall', ang: 0, land: best - nutHalf(type) + 1, born: time});
+  for (let i = 0; i < 12; i++) parts.push({x: x + rand(-16, 16), y: y0 + rand(-8, 8), vx: rand(-40, 40), vy: rand(-20, 40), life: .9, col: i % 2 ? '#a6e06a' : '#55a03a', g: 100, size: 2});
+  SFX.rustle();
+  if (type === 'golden') say('goldenDrop', 2); else if (Math.random() < 0.5) narrate('falling');
+}
+
+/* ======== moving along a route ======== */
+function plan(s, goals) {
+  // finish a leap or climb that's under way, then carry on from where it ends
+  const keep = s.cur && s.cur.kind !== 'walk' ? s.cur : null;
+  const from = keep ? {p: keep.b.p, x: keep.b.x} : {p: s.p, x: s.x};
+  const G = graph([from, ...goals]), D = dijkstra(G, G.tn[0]);
+  return {G, D, keep, goals: G.tn.slice(1)};
+}
+function follow(s, P, goalNode) { s.steps = routeTo(P.D, goalNode); s.cur = P.keep; }
+function moveSquirrel(s, dt) {
+  let budget = dt * s.mul * (s.zoom > 0 ? ZOOM : 1);
+  while (budget > 1e-6) {
+    if (!s.cur) {
+      if (!s.steps.length) { s.mode = 'idle'; return; }
+      s.cur = s.steps.shift(); s.cur.t = 0;
+      if (s.cur.kind === 'jump' || s.cur.kind === 'bounce') {
+        s.cur.dur = s.cur.kind === 'jump' ? jumpDur(s.cur.a, s.cur.b) : bounceDur(s.cur.a, s.cur.b);
+        if (s.cur.kind === 'jump') SFX.jump(); else { SFX.boing(); s.cur.mush.squash = 0.3; }
+        if (Math.abs(s.cur.b.x - s.cur.a.x) > 1) s.face = Math.sign(s.cur.b.x - s.cur.a.x);
+      }
+      describe(s, s.cur);
+    }
+    const c = s.cur;
+    if (c.kind === 'walk') {
+      s.mode = 'walk';
+      const d = c.b.x - s.x, can = WALK * budget;
+      if (Math.abs(d) > 0.01) s.face = Math.sign(d);
+      if (Math.abs(d) <= can) { budget -= Math.abs(d) / WALK; s.anim += Math.abs(d); s.x = c.b.x; s.y = c.b.y; s.p = c.b.p; s.cur = null; }
+      else { s.x += Math.sign(d) * can; s.y = pY(PLATS[s.p], s.x); s.anim += can; budget = 0; }
+    } else if (c.kind === 'climb') {
+      s.mode = 'climb'; s.x = c.trunk.cx; s.climbDir = Math.sign(c.b.y - c.a.y);
+      const d = c.b.y - s.y, can = CLIMB * budget;
+      s.anim += Math.min(Math.abs(d), can);
+      s.scratch += Math.min(Math.abs(d), can); if (s.scratch > 16) { s.scratch = 0; if (s.who === 'you') SFX.scratch(); }
+      if (Math.abs(d) <= can) { budget -= Math.abs(d) / CLIMB; s.y = c.b.y; s.p = c.b.p; s.cur = null; }
+      else { s.y += Math.sign(d) * can; budget = 0; }
+    } else {
+      s.mode = 'jump';
+      c.t += budget;
+      if (c.t >= c.dur) { budget = c.t - c.dur; s.x = c.b.x; s.y = c.b.y; s.p = c.b.p; s.cur = null; puff(s.x, s.y, '#d8c89a', 3); }
+      else {
+        const u = c.t / c.dur, a = c.a, b = c.b, cx = (a.x + b.x) / 2;
+        const cy = c.kind === 'bounce' ? b.y - 120 : Math.min(a.y, b.y) - (b.y > a.y + 40 ? 20 : 40);
+        s.x = (1 - u) * (1 - u) * a.x + 2 * u * (1 - u) * cx + u * u * b.x;
+        s.y = (1 - u) * (1 - u) * a.y + 2 * u * (1 - u) * cy + u * u * b.y;
+        s.jumpU = u;
+        budget = 0;
+      }
+    }
+  }
+}
+
+// The voice says what a squirrel starts doing: yours often, the grey one now and then.
+function describe(s, step) {
+  if (phase !== 'play') return;
+  let what = step.kind === 'walk' ? (Math.abs(step.b.x - step.a.x) > 60 ? 'run' : null)
+    : step.kind === 'climb' ? (step.b.y < step.a.y ? 'up' : 'down') : step.kind;
+  if (!what) return;
+  if (s.who === 'you') {
+    if (what === s.said && time - s.saidAt < 9) return;   // don't repeat the same thing straight away
+    if (what === 'bounce') say('bounceYou', 2);
+    else if (what === 'up' && step.trunk && Math.random() < 0.5 && time - (step.trunk.named || -99) > 25) {   // sometimes: name the tree
+      step.trunk.named = time; narrate('tree' + step.trunk.kind);
+    } else narrate(what + 'You');
+    s.said = what; s.saidAt = time;
+  } else if ((what === 'up' || what === 'jump') && Math.random() < 0.35) narrate(what + 'Ai', NARRATE_GAP * 1.6);
+}
+
+/* ======== a hint: the best nut for you to go for next ======== */
+let hint = null, hintT = 0;
+function bestNutFor(s) {
+  const resting = nuts.filter(n => n.state === 'rest');
+  if (!resting.length) return null;
+  const P = plan(s, resting.map(n => ({p: n.p, x: n.x})));
+  let best = null, bd = Infinity;
+  resting.forEach((n, i) => { const d = P.D.dist[P.goals[i].id] / Math.sqrt(Math.max(1, NUT_TYPES[n.type].pts)); if (d < bd) { bd = d; best = n; } });
+  return best;
+}
+
+/* ======== the grey squirrel ======== */
+function aiThink(dt) {
+  const s = ai;
+  if (s.goal && s.goal.state !== 'rest') { s.goal = null; s.steps = []; s.think = Math.min(s.think, 0.35); }
+  if (s.goal) return;
+  if ((s.think -= dt) > 0) return;
+  const resting = nuts.filter(n => n.state === 'rest');
+  if (!resting.length) return;
+  const P = plan(s, resting.map(n => ({p: n.p, x: n.x})));
+  // nearer is better; worth more is better (berries count as worth one)
+  const order = resting.map((n, i) => ({n, g: P.goals[i], d: P.D.dist[P.goals[i].id] / Math.sqrt(Math.max(1, NUT_TYPES[n.type].pts))})).sort((a, b) => a.d - b.d);
+  const choice = order.length > 1 && Math.random() < LV.ai.mistake ? order[1] : order[0];
+  s.goal = choice.n; follow(s, P, choice.g);
+}
+
+/* ======== update ======== */
+function update(dt) {
+  time += dt;
+  if (phase === 'play') {
+    if (deck.length && (dropTimer -= dt) <= 0) { dropNut(); dropTimer = LV.nuts.every; }
+    aiThink(dt);
+    if ((hintT -= dt) <= 0 || (hint && hint.state !== 'rest')) { hintT = 0.4; hint = bestNutFor(you); }
+    you.still = you.mode === 'idle' ? (you.still || 0) + dt : 0;
+    if (you.still > 7 && time - (you.nudged || 0) > 14 && nuts.some(n => n.state === 'rest')) { you.nudged = time; narrate('waitYou', 0.5); }
+    for (const s of squirrels) { moveSquirrel(s, dt); if (s.zoom > 0 && (s.zoom -= dt) <= 0) { document.getElementById(s.who === 'you' ? 'pillYou' : 'pillAi').classList.remove('zoom'); if (s === you) Music.speed(false); } }
+  }
+  for (const n of nuts) if (n.state === 'fall') {
+    n.vy += 500 * dt; n.y += n.vy * dt; n.ang += dt * 9;
+    if (n.y >= n.land) { n.y = n.land; n.state = 'rest'; n.ang = 0; SFX.thud(); puff(n.x, n.y + 6, '#c9b88a', 5); }
+  }
+  if (phase === 'play') for (const n of nuts) {
+    if (n.state !== 'rest' && n.state !== 'fall') continue;
+    for (const s of [you, ai]) if (Math.hypot(s.x - n.x, s.y - 20 - n.y) < PICK_DIST) { grab(s, n); break; }
+  }
+  for (const f of flyers) {
+    f.t += dt / 0.6;
+    if (f.t >= 1 && !f.done) { f.done = true; f.s.shown += NUT_TYPES[f.type].pts; updateScore(); }
+  }
+  flyers = flyers.filter(f => !f.done);
+  if (you.marker && (you.mode === 'idle' || time - you.marker.t > 4)) you.marker = null;
+  for (const m of MUSH) m.squash = Math.max(0, m.squash - dt);
+  for (const s of squirrels) idleTricks(s, dt);
+  for (const s of squirrels) {   // positions for the speed-boost afterimages
+    if (s.zoom > 0) { s.trail.unshift({x: s.x, y: s.y, pose: squirrelPose(s)}); if (s.trail.length > 8) s.trail.pop(); }
+    else if (s.trail.length) s.trail.pop();
+    if (s.zoom > 0 && Math.random() < .3) parts.push({x: s.x + rand(-10, 10), y: s.y - 20 + rand(-10, 10), vx: 0, vy: -20, life: .3, col: '#fff6a0', g: 0, star: true});
+  }
+  for (const p of parts) { p.vy += (p.g ?? 120) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+  parts = parts.filter(p => p.life > 0);
+  prevCam = {x: cam.x, y: cam.y};
+  const [tx, ty] = camTarget();
+  cam.x += (tx - cam.x) * Math.min(1, dt * 4);
+  cam.y += (ty - cam.y) * Math.min(1, dt * 3);
+  updateLeaves(dt);
+  if (phase === 'play' && !deck.length && nuts.every(n => n.state === 'gone') && !flyers.length) {
+    if (!endAt) endAt = time + 0.8; else if (time > endAt) showEnd();
+  }
+}
+function grab(s, n) {
+  n.state = 'gone';
+  const T = NUT_TYPES[n.type];
+  s.score += T.pts; if (T.pts) s.got.push(n.type);
+  if (T.zoom) { s.zoom = ZOOM_TIME; document.getElementById(s.who === 'you' ? 'pillYou' : 'pillAi').classList.add('zoom'); SFX.zoom(); if (s === you) Music.speed(true); }
+  if (s.who === 'you') {
+    grabs++;
+    if (n.type === 'golden') { SFX.golden(); say('goldenYou', 3); }
+    else if (n.type === 'walnut') { SFX.got(s.score - 1); say(pick(['walnutYou1', 'walnutYou2']), 2); }
+    else if (n.type === 'berries') say('berriesYou', 3);
+    else { SFX.got(Math.min(s.score - 1, 11)); narrate('acornYou' + (1 + (grabs % 4)), 0.6); }   // takes turns with the verbs
+  } else {
+    SFX.greyGot();
+    if (n.type === 'berries') say('berriesAi', 2); else if (Math.random() < 0.4) narrate(pick(['acornAi1', 'acornAi2', 'acornAi3']), NARRATE_GAP * 1.6);
+  }
+  sparkle(n.x, n.y, n.type === 'golden' ? 24 : 12, n.type === 'golden' ? '#ffd84a' : s.who === 'you' ? '#fff6a0' : '#dfe6f0');
+  if (T.pts) flyers.push({s, type: n.type, x: n.x - cx0, y: n.y - cy0, t: 0});
+  if (s === ai) { ai.goal = null; ai.think = rand(...LV.ai.think) / AI_EASE * (ai.score > you.score ? AI_AHEAD_SLOW : 1); }
+}
+function camLimits() {
+  const maxY = WORLD_H - vh, minY = Math.min(-60, maxY);
+  return {maxX: Math.max(0, WORLD_W - vw), minY, maxY};
+}
+function camTarget() {
+  const L = camLimits();
+  const tx = vw >= WORLD_W ? (WORLD_W - vw) / 2 : clamp(you.x - vw / 2, 0, L.maxX);
+  return [tx, clamp(you.y - vh * 0.55, L.minY, L.maxY)];
+}
+function snapCamera() { if (!you) return; const [tx, ty] = camTarget(); cam.x = tx; cam.y = ty; prevCam = {x: tx, y: ty}; }
+
+/* ======== particles and ambient leaves ======== */
+function sparkle(x, y, n, col) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 110;
+    parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .5 + Math.random() * .4, col: i % 2 ? col : '#ffffff', g: 120, star: true}); }
+}
+function puff(x, y, col, n) {
+  for (let i = 0; i < n; i++) parts.push({x: x + (Math.random() - .5) * 12, y, vx: (Math.random() - .5) * 80, vy: -20 - Math.random() * 50, life: .35 + Math.random() * .2, col, g: 80, size: 2});
+}
+// petals, leaves or snowflakes drifting in front of everything
+let drift = [];
+function makeDrift() {
+  const D = THEMES[LV.theme].drift;
+  return Array.from({length: D.n}, (_, i) => ({x: Math.random() * 900, y: Math.random() * 500, ph: i * 1.7, col: D.cols[i % D.cols.length], fall: D.fall * (0.7 + Math.random() * 0.6),
+    snow: D.snow, rain: D.rain, glow: D.glow}));
+}
+function updateLeaves(dt) {
+  const dx = (cam.x - prevCam.x) * 1.2, dy = (cam.y - prevCam.y) * 1.2;
+  for (const l of drift) {
+    if (l.rain) { l.x -= 40 * dt + dx; l.y += l.fall * dt - dy; }
+    else if (l.glow) { l.x += Math.sin(time * .7 + l.ph) * 14 * dt - dx; l.y += Math.cos(time * .9 + l.ph * 1.3) * 10 * dt - dy; }   // fireflies wander
+    else { l.x += (Math.sin(time * 1.3 + l.ph) * (l.snow ? 12 : 28) - (l.snow ? 4 : 10)) * dt - dx; l.y += l.fall * dt - dy; }
+    if (l.x < -8) l.x += vw + 16; if (l.x > vw + 8) l.x -= vw + 16;
+    if (l.y > vh + 6) { l.y = -6; l.x = Math.random() * vw; } if (l.y < -8) l.y = vh + 4;
+  }
+}
+
+/* ======== rendering ======== */
+let cx0 = 0, cy0 = 0;   // rounded camera this frame
+function drawLayer(L, bottom, camY0) {
+  const W = L.c.width;
+  let x = -mod(Math.round(cx0 * L.f), W);
+  const sb = Math.round((bottom - camY0) - (cy0 - camY0) * L.f);
+  for (; x < vw; x += W) ctx.drawImage(L.c, x, sb - L.c.height);
+  if (L.base && sb < vh) { ctx.fillStyle = L.base; ctx.fillRect(0, sb, vw, vh - sb); }
+}
+const floorPal = {};
+function floorRows(name) {   // per-depth colours, worked out once per theme
+  if (floorPal[name]) return floorPal[name];
+  const F = THEMES[name].floor, rows = [];
+  for (let i = 0; i <= 32; i++) rows.push(F.near.map((c, k) => hex32(mix(F.far[k], c, i / 32))));
+  rows.dots = F.dots.map(hex32); rows.rate = F.rate;
+  return floorPal[name] = rows;
+}
+// The forest floor is drawn row by row; each row scrolls at its own speed (the classic 80s line-scroll floor).
+function drawFloor() {
+  const top = Math.max(FLOOR_TOP, cy0), bottom = Math.min(cy0 + vh, FLOOR_TOP + floorC.height);
+  if (bottom <= top) return;
+  const rows = bottom - top, half = vw / 2, PAL = floorRows(LV.theme), DOTS = PAL.dots, dotAt = 0.94 - PAL.rate;
+  for (let r = 0; r < rows; r++) {
+    const wy = top + r, f = 0.45 + (wy - FLOOR_TOP) / (GROUND - FLOOR_TOP) * 0.55, z = 1 / f;
+    const band = Math.floor(z * 6), dz = Math.floor(z * 80);
+    const pal = PAL[clamp(Math.round((f - 0.45) / 0.55 * 32), 0, 32)];
+    const o = r * vw;
+    for (let x = 0; x < vw; x++) {
+      const u = (x - half) / f + cx0 + half;
+      let col = pal[(Math.floor(u / 44) + band) & 1];
+      const hsh = hash2(Math.floor(u / 5), dz);
+      if (hsh < 0.06) col = pal[2]; else if (hsh > 0.94) col = pal[3];
+      else if (hsh > dotAt && DOTS.length) col = DOTS[Math.floor(hsh * 1000) % DOTS.length];
+      floor32[o + x] = col;
+    }
+  }
+  floorCtx.putImageData(floorImg, 0, 0, 0, 0, vw, rows);
+  ctx.drawImage(floorC, 0, 0, vw, rows, 0, top - cy0, vw, rows);
+}
+function drawFrame(F, x, y, flip, rot) {
+  if (!F.img) return;
+  const c = SHEET.cell;
+  ctx.save(); ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(F.img, F.sx, F.sy, c, c, -SHEET.ax, -SHEET.ay, c, c);
+  ctx.restore();
+}
+// Which frame a squirrel shows right now, and how it's turned.
+function squirrelPose(s) {
+  if (s.zoom > 0 && (s.mode === 'walk' || s.mode === 'jump')) {   // curled up in a ball, rolling: the last 4 spin frames, turned a quarter more each round
+    const k = Math.floor(time * 18);
+    return {F: frame(s.who, 'spin', 4 + k % 4), centre: true, flip: s.face < 0, rot: (Math.floor(k / 4) % 4) * Math.PI / 2 * s.face};
+  }
+  if (s.mode === 'climb') {
+    const moving = s.cur && s.cur.kind === 'climb';
+    // seen from behind, one tail, four legs reaching up the trunk (frames 1-8 of 'climb1'); turned round for going down head-first
+    return {F: frame(s.who, 'climb1', 1 + (moving ? Math.floor(s.anim / 6) % 8 : 0)), centre: true, rot: s.climbDir > 0 ? Math.PI : 0};
+  }
+  if (s.mode === 'jump') { const n = SHEET.rows.leap[1]; return {F: frame(s.who, 'leap', Math.min(n - 1, Math.floor((s.jumpU || 0) * n))), flip: s.face < 0}; }
+  if (s.mode === 'walk') return {F: frame(s.who, 'run', Math.floor(s.anim / 11)), flip: s.face < 0};
+  if (s.trick && time < s.trick.end) return {F: frame(s.who, s.trick.name, Math.floor((time - s.trick.start) * 8)), flip: s.face < 0};
+  return {F: frame(s.who, 'idle', Math.floor(time * 6 + (s.who === 'ai' ? 2 : 0))), flip: s.face < 0};
+}
+// now and then a waiting squirrel grooms, yawns, looks around or nibbles
+function idleTricks(s, dt) {
+  if (s.mode !== 'idle') { s.trick = null; s.nextTrick = rand(...IDLE_EVERY); return; }
+  if (s.trick && time < s.trick.end) return;
+  if ((s.nextTrick -= dt) > 0) return;
+  const name = pick(IDLE_TRICKS), n = SHEET.rows[name][1];
+  s.trick = {name, start: time, end: time + n / 8}; s.nextTrick = n / 8 + rand(...IDLE_EVERY);
+}
+function drawPose(pose, x, y) {
+  if (pose.centre) {   // turned round its middle (climbing, rolling) rather than standing on its feet
+    const F = pose.F, h = SHEET.cell / 2; if (!F.img) return;
+    ctx.save(); ctx.translate(x, y - 20); if (pose.rot) ctx.rotate(pose.rot); if (pose.flip) ctx.scale(-1, 1);
+    ctx.drawImage(F.img, F.sx, F.sy, SHEET.cell, SHEET.cell, -h, -h, SHEET.cell, SHEET.cell); ctx.restore();
+  } else drawFrame(pose.F, x, y, pose.flip);
+}
+function drawSquirrel(s) {
+  const x = Math.round(s.x - cx0), y = Math.round(s.y - cy0), pose = squirrelPose(s);
+  // speed boost, Sonic style: fading copies left behind and speed lines
+  if (s.trail.length) {
+    for (let i = s.trail.length - 1; i >= 1; i -= 2) {
+      const t = s.trail[i]; ctx.globalAlpha = 0.5 * (1 - i / s.trail.length);
+      drawPose(t.pose, Math.round(t.x - cx0), Math.round(t.y - cy0));
+    }
+    ctx.globalAlpha = 1;
+    const old = s.trail[s.trail.length - 1], dx = s.x - old.x, dy = s.y - old.y, d = Math.hypot(dx, dy);
+    if (s.zoom > 0 && d > 6) {
+      const ux = dx / d, uy = dy / d, px = -uy, py = ux;   // direction of travel and across it
+      [[-9, 34, '#ffffff'], [0, 24, '#fff6a0'], [9, 30, '#9fd8ff']].forEach(([off, len, col], k) => {
+        const ox = x - ux * (18 + k * 4) + px * off, oy = y - 18 - uy * (18 + k * 4) + py * off;
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.8; ctx.lineWidth = 2; ctx.beginPath();
+        ctx.moveTo(Math.round(ox), Math.round(oy)); ctx.lineTo(Math.round(ox - ux * len), Math.round(oy - uy * len)); ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    }
+  }
+  drawPose(pose, x, y);
+}
+function drawMushroom(m) {
+  const own = IMG['mushroom-bounce-' + season()], img = own || IMG['mushroom-bounce'];
+  if (img) {   // squashes down when a squirrel bounces off it; sits a little into the ground on a soft shadow
+    const x = Math.round(m.x - cx0), y = GROUND + 4 - cy0, k = m.squash > 0 ? 1 - 0.3 * m.squash / 0.3 : 1, h = Math.round(img.height * k);
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#1a1028'; ctx.beginPath(); ctx.ellipse(x, y - 2, img.width * .38, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.drawImage(img, x - (img.width >> 1), y - h, img.width, h);
+    if (!own) {   // hide the cut-off bottom of the stem: a little snow mound or a tuft of grass in front
+      const T = THEMES[LV.theme];
+      if (T.snow) { ctx.fillStyle = '#dfe8f6'; ctx.beginPath(); ctx.ellipse(x, y - 1, 13, 5, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 8, y - 6, 12, 1); }
+      else if (T.grass) for (let i = -8; i <= 8; i += 2) { ctx.fillStyle = T.grass[(i / 2) & 1]; const gh = 3 + ((i * 7) & 3); ctx.fillRect(x + i, y - gh - 1, 1, gh + 1); }
+    }
+    return;
+  }
+  const x = Math.round(m.x - cx0), y = GROUND - cy0, sq = m.squash > 0 ? Math.round(4 * m.squash / 0.3) : 0;
+  ctx.fillStyle = '#3b1a0c'; ctx.fillRect(x - 7, y - 16 + sq, 14, 17 - sq);
+  ctx.fillStyle = '#f2ead8'; ctx.fillRect(x - 6, y - 15 + sq, 12, 15 - sq);
+  ctx.fillStyle = '#d8ccb0'; ctx.fillRect(x + 2, y - 15 + sq, 4, 15 - sq);
+  const w = 26 + sq * 2, top = y - 30 + sq * 2;
+  for (let r = 0; r < 16 - sq; r++) {
+    const hw = Math.round(w * Math.sqrt(1 - Math.pow(1 - r / (16 - sq), 2)));
+    ctx.fillStyle = '#3b1a0c'; ctx.fillRect(x - hw - 1, top + r, hw * 2 + 2, 1);
+    ctx.fillStyle = r < 4 ? '#ff6a5a' : '#e0402e'; ctx.fillRect(x - hw, top + r, hw * 2, 1);
+  }
+  ctx.fillStyle = '#ffffff';
+  for (const [dx, dy] of [[-12, 6], [6, 4], [-2, 10], [14, 10], [-18, 11]]) ctx.fillRect(x + dx, top + dy, 4, 3);
+}
+function render() {
+  if (!skyC || !LV) return;
+  cx0 = Math.round(cam.x); cy0 = Math.round(cam.y);
+  const camY0 = camLimits().maxY, S = ART.S;
+  // sky, sun, clouds
+  const skyB = Math.round((FLOOR_TOP + 8 - camY0) - (cy0 - camY0) * 0.06);
+  ctx.fillStyle = S.bands[0]; ctx.fillRect(0, 0, vw, vh);
+  ctx.drawImage(skyC, 0, skyB - skyC.height);
+  ctx.drawImage(ART.sun, Math.round(vw * 0.82 - cx0 * 0.02), Math.max(skyB - (S.stars ? 380 : 440), SUN_TOP));   // never above the screen
+  const period = vw + 300;
+  for (const c of ART.clouds) ctx.drawImage(c.spr, Math.round(mod(c.x - cx0 * 0.08 + time * c.v, period) - 140), Math.round(skyB - c.y));
+  drawLayer(ART.layers[0], GROUND - 60, camY0);
+  drawLayer(ART.layers[1], GROUND - 52, camY0);
+  drawLayer(ART.layers[2], GROUND - 44, camY0);
+  if (S.tint) { ctx.globalAlpha = S.tint[1]; ctx.fillStyle = S.tint[0]; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; }
+  drawFloor();
+  ctx.drawImage(WORLD, -cx0, -cy0);
+  MUSH.forEach(drawMushroom);
+  // tap marker: a little bouncing ring where your squirrel is going
+  if (you.marker) {
+    const m = you.marker, k = Math.floor(time * 6) % 2, x = Math.round(m.x - cx0), y = Math.round(m.y - cy0);
+    for (let a = 0; a < 20; a++) { const an = a / 20 * Math.PI * 2; ctx.fillStyle = (a + k) % 2 ? '#fff6a0' : '#ffd84a';
+      ctx.fillRect(x + Math.round(Math.cos(an) * (13 + k)), y - 3 + Math.round(Math.sin(an) * (6 + k * .5)), 2, 2); }
+  }
+  for (const n of nuts) {
+    if (n.state !== 'rest' && n.state !== 'fall') continue;
+    const img = nutImg(n.type); if (!img) continue;
+    const bob = n.state === 'rest' && n.type !== 'acorn' ? Math.round(Math.sin(time * 4 + n.x) * 1.5) : 0;
+    const x = Math.round(n.x - cx0), y = Math.round(n.y - cy0) + bob;
+    if (n.type === 'golden' || n.type === 'berries') {   // a soft glow so special ones stand out
+      const k = (Math.sin(time * 5) + 1) / 2;
+      ctx.globalAlpha = 0.25 + k * 0.2; ctx.fillStyle = n.type === 'golden' ? '#ffe680' : '#ff9ec4';
+      ctx.beginPath(); ctx.arc(x, y, img.width * .7, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      if (Math.random() < .1) parts.push({x: n.x + rand(-12, 12), y: n.y + rand(-12, 12), vx: 0, vy: -20, life: .5, col: '#ffffff', g: 0, star: true});
+    }
+    if (n.state === 'fall') { ctx.save(); ctx.translate(x, y); ctx.rotate(n.ang); ctx.drawImage(img, -img.width / 2, -img.height / 2); ctx.restore(); }
+    else ctx.drawImage(img, x - (img.width >> 1), y - (img.height >> 1));
+  }
+  squirrels.forEach(drawSquirrel);
+  const bob = Math.round(Math.sin(time * 6) * 3);
+  // the hint: a bouncing arrow over the best nut to go for next
+  const hx = hint && hint.state === 'rest' ? Math.round(hint.x - cx0) : null, hy = hint ? Math.round(hint.y - cy0) : 0;
+  if (phase === 'play' && hx !== null && hx > -10 && hx < vw + 10 && hy > -10 && hy < vh + 10) drawArrow(hx, hy - 34 + bob);
+  for (const p of parts) {
+    ctx.fillStyle = p.col; const x = Math.round(p.x - cx0), y = Math.round(p.y - cy0), s = p.size || 1;
+    if (p.star && p.life > .25) { ctx.fillRect(x - 2, y, 5, 1); ctx.fillRect(x, y - 2, 1, 5); } else ctx.fillRect(x, y, s, s);
+  }
+  drawLayer(ART.fore, WORLD_H + 12, camY0);
+  for (const l of drift) { ctx.fillStyle = l.col; const fl = Math.sin(time * 5 + l.ph) > 0, x = Math.round(l.x), y = Math.round(l.y);
+    if (l.rain) { ctx.fillRect(x, y, 1, 3); ctx.fillRect(x - 1, y + 3, 1, 3); continue; }
+    if (l.glow) { const on = .5 + .5 * Math.sin(time * 2.6 + l.ph); ctx.globalAlpha = on * .4; ctx.fillRect(x - 1, y, 4, 2); ctx.fillRect(x, y - 1, 2, 4); ctx.globalAlpha = .4 + on * .6; ctx.fillRect(x, y, 2, 2); ctx.globalAlpha = 1; continue; }
+    if (l.snow) ctx.fillRect(Math.round(l.x), Math.round(l.y), 2, 2); else ctx.fillRect(Math.round(l.x), Math.round(l.y), fl ? 4 : 2, fl ? 2 : 4); }
+  // the hinted nut off screen: a yellow pointer at the edge showing the way
+  if (phase === 'play' && hx !== null && (hx < 0 || hx > vw || hy < 0 || hy > vh)) {
+    const ex = clamp(hx, 18, vw - 18), ey = clamp(hy, 64, vh - 18), an = Math.atan2(hy - ey, hx - ex), pulse = 1 + Math.sin(time * 8) * .15;
+    ctx.fillStyle = '#3b1a0c'; ctx.beginPath(); ctx.arc(ex, ey, 13 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd84a'; ctx.beginPath(); ctx.arc(ex, ey, 11 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3b1a0c'; ctx.beginPath(); ctx.moveTo(ex + Math.cos(an) * 9, ey + Math.sin(an) * 9);
+    ctx.lineTo(ex + Math.cos(an + 2.4) * 7, ey + Math.sin(an + 2.4) * 7); ctx.lineTo(ex + Math.cos(an - 2.4) * 7, ey + Math.sin(an - 2.4) * 7); ctx.fill();
+  }
+  // nuts flying up to the score pills
+  for (const f of flyers) {
+    const el = document.getElementById(f.s.who === 'you' ? 'nYou' : 'nAi').getBoundingClientRect();
+    const tx = (el.left + el.width / 2) * dpr / scale, ty = (el.top + el.height / 2) * dpr / scale, u = Math.min(1, f.t);
+    const x = f.x + (tx - f.x) * u, y = f.y + (ty - f.y) * u - Math.sin(u * Math.PI) * 60, img = nutImg(f.type);
+    if (img) ctx.drawImage(img, Math.round(x - img.width / 2), Math.round(y - img.height / 2));
+  }
+  drawFaces();
+}
+function drawArrow(x, y) {
+  ctx.fillStyle = '#3b1a0c'; ctx.fillRect(x - 6, y - 14, 12, 14); ctx.beginPath(); ctx.moveTo(x - 13, y - 1); ctx.lineTo(x + 13, y - 1); ctx.lineTo(x, y + 13); ctx.fill();
+  ctx.fillStyle = '#ffd84a'; ctx.fillRect(x - 4, y - 12, 8, 13); ctx.beginPath(); ctx.moveTo(x - 9, y + 1); ctx.lineTo(x + 9, y + 1); ctx.lineTo(x, y + 10); ctx.fill();
+}
+// little animated squirrel faces in the score pills and cards
+function drawFaces() {
+  for (const c of document.querySelectorAll('canvas.face')) {
+    if (!c.offsetParent) continue;
+    const g = c.getContext('2d'), who = c.dataset.who;
+    const eating = c.dataset.eat === '1';
+    const F = frame(who, eating ? 'eat' : 'idle', Math.floor(time * (eating ? 8 : 6)));
+    g.clearRect(0, 0, 68, 68); if (!F.img) continue;
+    g.save(); if (c.dataset.flip) { g.translate(68, 0); g.scale(-1, 1); }
+    g.drawImage(F.img, F.sx + 6, F.sy + 6, 68, 68, 0, 0, 68, 68); g.restore();   // the 68px middle of the 80px cell
+  }
+}
+
+/* ======== score, start and end ======== */
+function updateScore(reset) {
+  for (const [s, id] of [[you, 'nYou'], [ai, 'nAi']]) {
+    const el = document.getElementById(id); if (reset) s.shown = 0;
+    if (el.textContent !== String(s.shown)) { el.textContent = s.shown; el.parentNode.classList.remove('pop'); void el.offsetWidth; el.parentNode.classList.add('pop'); }
+  }
+  if (reset) document.querySelectorAll('.pill').forEach(p => p.classList.remove('zoom'));
+}
+function showStart(level) {
+  round++; newGame(level); phase = 'start'; if (AC) Music.stop(0.3);
+  document.getElementById('count').hidden = true;
+  document.getElementById('startTitle').textContent = 'Level ' + (level + 1);
+  const unlocked = store.get('unlocked', 0), box = document.getElementById('levels'); box.innerHTML = '';
+  LEVELS.forEach((_, i) => {
+    const b = document.createElement('button'); b.textContent = i + 1; b.disabled = i > unlocked; b.classList.toggle('on', i === level);
+    b.addEventListener('click', () => { audio(); showStart(i); }); box.appendChild(b);
+  });
+  document.getElementById('start').hidden = false;
+}
+function startRound() {
+  audio(); document.getElementById('start').hidden = true; document.getElementById('end').hidden = true;
+  phase = 'count'; const el = document.getElementById('count'); const r = ++round;
+  say('level' + (LEVEL + 1), 3);
+  const steps = [['three', '3'], ['two', '2'], ['one', '1'], ['go', 'Go!']];
+  steps.forEach(([key, t], i) => setTimeout(() => {
+    if (r !== round) return;   // restarted meanwhile
+    el.hidden = false; el.textContent = t; SFX.count(i === 3); say(key, 3);
+    if (i === 3) {
+      phase = 'play'; ai.think = 0.8; Music.start();
+      setTimeout(() => { if (r === round) el.hidden = true; }, 700);
+      if (LEVEL === 0) setTimeout(() => { if (r === round && !tapped) say('tap', 2); }, 1500);
+    }
+  }, 1300 + i * 950));
+}
+function showEnd() {
+  phase = 'end'; Music.stop(0.5);
+  const youWin = you.score > ai.score, tie = you.score === ai.score, last = LEVEL === LEVELS.length - 1;
+  if (youWin || tie) store.set('unlocked', Math.max(store.get('unlocked', 0), Math.min(LEVEL + 1, LEVELS.length - 1)));
+  document.getElementById('endTitle').textContent = tie ? "It's a tie!" : youWin ? (last ? 'You won every level!' : 'You win!') : 'Grey wins this time!';
+  (youWin || tie ? SFX.win : SFX.lose)();
+  setTimeout(() => say(tie ? 'tie' : youWin ? (last ? 'allDone' : 'win') : 'lose', 3), 400);
+  for (const [s, id] of [[you, 'rowYou'], [ai, 'rowAi']]) {
+    const row = document.getElementById(id); row.innerHTML = '';
+    const other = s === you ? ai : you, won = s.score > other.score;
+    const who = document.createElement('canvas'); who.width = who.height = 68; who.className = 'face who';
+    who.dataset.who = s.who; if (s.who === 'ai') who.dataset.flip = '1'; if (won) who.dataset.eat = '1';
+    row.appendChild(who);
+    const b = document.createElement('b'); b.textContent = s.score; row.appendChild(b);
+    for (const type of s.got) { if (!nutImg(type)) continue; const img = new Image(); img.src = nutImg(type).src; img.alt = ''; row.appendChild(img); }
+    row.classList.toggle('win', won);
+  }
+  document.getElementById('next').hidden = !(youWin || tie);
+  document.getElementById('end').hidden = false;
+}
+
+/* ======== input: tap where you want to go ======== */
+function tapAt(clientX, clientY) {
+  if (phase !== 'play') return;
+  const wx = clientX * dpr / scale + cx0, wy = clientY * dpr / scale + cy0;
+  let goal = null, bd = TAP_NUT;
+  for (const n of nuts) if (n.state === 'rest') { const d = Math.hypot(n.x - wx, n.y - wy); if (d < bd) { bd = d; goal = {p: n.p, x: n.x}; } }
+  if (!goal) {   // otherwise the nearest branch (or the ground), favouring the one under the finger
+    bd = Infinity;
+    PLATS.forEach((p, i) => { const x = clamp(wx, p.x1, p.x2), dy = wy - pY(p, x), d = Math.hypot(x - wx, dy < 0 ? dy * 0.6 : dy * 1.6); if (d < bd) { bd = d; goal = {p: i, x}; } });
+  }
+  const P = plan(you, [goal]); follow(you, P, P.goals[0]);
+  you.marker = {x: P.goals[0].x, y: P.goals[0].y, t: time};
+  tapped = true; SFX.tap();
+}
+cvs.addEventListener('pointerdown', e => { audio(); tapAt(e.clientX, e.clientY); });
+addEventListener('contextmenu', e => e.preventDefault());
+document.getElementById('play').addEventListener('click', startRound);
+document.getElementById('restart').addEventListener('click', () => { audio(); showStart(LEVEL); });
+document.getElementById('again').addEventListener('click', () => { audio(); newGame(LEVEL); startRound(); });
+document.getElementById('next').addEventListener('click', () => { audio(); showStart((LEVEL + 1) % LEVELS.length); });
+document.getElementById('mute').addEventListener('click', () => { audio(); setMuted(!muted); });
+setMuted(muted);
+addEventListener('resize', resize);
+
+/* ======== main loop ======== */
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  update(dt); render();
+  requestAnimationFrame(tick);
+}
+ready.then(() => { showStart(Math.min(store.get('unlocked', 0), LEVELS.length - 1)); resize(); requestAnimationFrame(tick); });
+</script>
+<script>
+// Offline support: sw.js caches this page. Once the page has loaded, send it every file the page used (pictures,
+// voice clips, music) so those work offline too. Fails quietly where unsupported, e.g. on file://.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then((reg) => {
+    const send = () => reg.active && reg.active.postMessage({ cache: [location.href, ...performance.getEntriesByType('resource').map((r) => r.name)] });
+    send(); setTimeout(send, 5000); setTimeout(send, 20000);
+  }).catch(() => {});
+}
+</script>
+</body>
+</html>
