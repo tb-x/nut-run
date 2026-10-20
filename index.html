@@ -53,7 +53,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:#2d5c41;overscroll-beh
   box-shadow:0 3px 0 rgba(0,0,0,.2);touch-action:manipulation;cursor:pointer}
 #levels button.on{background:var(--gold)}
 #levels button:disabled{opacity:.35;cursor:default}
-@media (max-height:460px){#levels{max-width:none}}   /* short, wide screens: one row of levels */
+@media (max-height:460px){   /* short, wide screens: two rows of levels, and a smaller play button and faces so it all fits */
+  #levels{max-width:310px;gap:6px;margin-top:6px}
+  .card{padding:10px 22px 12px}
+  .versus canvas{width:64px;height:64px}
+  .go:not(.small){width:72px;height:72px}
+}
 .row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:1px;margin:4px 0;padding:2px 6px;border-radius:14px}
 .row canvas.who{width:clamp(48px,12vmin,68px);height:clamp(48px,12vmin,68px);image-rendering:pixelated}
 .row img{width:clamp(22px,5.5vmin,32px);height:clamp(22px,5.5vmin,32px);image-rendering:pixelated}
@@ -117,6 +122,12 @@ const AI_AHEAD_SLOW = 2;       // when grey is ahead, it pauses this many times 
 const AI_EASE = 0.9;           // grey's speed on every level is multiplied by this, and its pauses divided by it (lower = easier)
 const PICK_DIST = 26;          // how close a squirrel must get to grab a nut
 const TAP_NUT = 40;            // a tap this close to a nut goes straight for it
+const TAP_TRUNK = 8;           // a tap on a trunk, or this close to its sides, climbs to that height
+const PUNCH_REACH = 30;        // levels with punch: grey punches you when it's this close to you on the same branch
+const PUNCH_EVERY = [10, 16];  // ... then waits this many seconds before it can punch again (and 6 s at the start)
+const PUNCH_CHASE = 0.35;      // ... chance grey runs at you instead of a nut, when you're on a branch near it
+const PUNCH_FPS = 12;          // punch animation speed; the paw lands on frame 2
+const DIZZY_TIME = 2.5;        // seconds your squirrel sits dizzy on the ground after being knocked off
 const VOICE_VOL = 0.9;         // spoken lines (each clip is first evened out to the same level)
 const SFX_VOL = 0.45;          // synthesized effects
 const MUSIC_VOL = 0.24;        // background music (an Eleven Music track per season)
@@ -126,7 +137,7 @@ const MUSIC_ZOOM = 1.08;       // the music plays this much faster while you hav
 const CHIP_VOL = 0.2;          // the synthesized chiptune, used only if a track can't load
 const MUSIC_BPM = 116;         // chiptune tempo on level 1; each level adds MUSIC_BPM_STEP
 const MUSIC_BPM_STEP = 4;
-const ASSET_V = 20;             // bump after changing anything in assets/
+const ASSET_V = 21;             // bump after changing anything in assets/
 const SUN_TOP = 30;            // the sun or moon stays at least this far below the top of the screen (under the buttons)
 const BG_GREY = 0.35;          // how much colour the background strips lose, so the trees you play on stand out
 const BG_HAZE = 0.1;           // extra horizon-colour haze on every background strip
@@ -220,7 +231,7 @@ const LEVELS = [
   { theme: 'aurora', W: 1560, H: 940,
     ai: {speed: 0.9, think: [0.4, 0.85], mistake: 0.2},
     nuts: {start: 10, drop: 20, every: 1.8}, mix: {acorn: 4, walnut: 3}, golden: 3, berries: 3,
-    mushrooms: [220, 670, 890, 1340],
+    mushrooms: [220, 670, 890, 1340], punch: true,   // grey punches you off the branch (PUNCH_* knobs)
     trees: [
       {x: 100, top: 600, home: 'you', b: [[1, 120, 110, 6], [1, 280, 100, 8], [-1, 360, 60, 4], [1, 460, 110, 6]]},
       {x: 330, top: 700, b: [[-1, 210, 110, 6], [1, 190, 100, 8], [-1, 380, 110, 8], [1, 370, 100, 8], [1, 550, 100, 6]]},
@@ -229,6 +240,58 @@ const LEVELS = [
       {x: 1000, top: 760, b: [[1, 270, 110, 8], [-1, 280, 100, 8], [1, 470, 100, 8], [-1, 470, 100, 8], [1, 640, 90, 6]]},
       {x: 1230, top: 700, b: [[1, 210, 110, 6], [-1, 190, 100, 8], [1, 380, 110, 8], [-1, 370, 100, 8], [-1, 550, 100, 6]]},
       {x: 1460, top: 600, home: 'ai', b: [[-1, 120, 110, 6], [-1, 280, 100, 8], [1, 360, 60, 4], [-1, 460, 110, 6]]},
+    ] },
+  { theme: 'fog', W: 1460, H: 900,   // two tall trees whose first branches are high up the trunk
+    ai: {speed: 0.86, think: [0.5, 0.95], mistake: 0.24},   // the punching makes up for a slower grey
+    nuts: {start: 10, drop: 20, every: 1.8}, mix: {acorn: 4, walnut: 3}, golden: 3, berries: 3,
+    mushrooms: [215, 730, 1245], punch: true,
+    trees: [
+      {x: 100, top: 560, home: 'you', b: [[1, 120, 110, 6], [1, 270, 100, 8], [-1, 350, 60, 4], [1, 430, 110, 6]]},
+      {x: 330, top: 720, b: [[-1, 300, 110, 6], [1, 320, 100, 8], [-1, 480, 100, 8], [1, 500, 100, 8], [1, 630, 90, 6]]},
+      {x: 590, top: 660, b: [[-1, 190, 120, 8], [1, 200, 110, 8], [-1, 380, 100, 8], [1, 400, 110, 8], [-1, 550, 90, 6]]},
+      {x: 870, top: 660, b: [[1, 190, 120, 8], [-1, 200, 110, 8], [1, 380, 100, 8], [-1, 400, 110, 8], [1, 550, 90, 6]]},
+      {x: 1130, top: 720, b: [[1, 300, 110, 6], [-1, 320, 100, 8], [1, 480, 100, 8], [-1, 500, 100, 8], [-1, 630, 90, 6]]},
+      {x: 1360, top: 560, home: 'ai', b: [[-1, 120, 110, 6], [-1, 270, 100, 8], [1, 350, 60, 4], [-1, 430, 110, 6]]},
+    ] },
+  { theme: 'sunset', W: 1620, H: 960,   // lots of berries
+    ai: {speed: 0.82, think: [0.5, 0.95], mistake: 0.25},   // slower, because berries speed grey up too
+    nuts: {start: 10, drop: 22, every: 1.7}, mix: {acorn: 4, walnut: 3}, golden: 3, berries: 4,
+    mushrooms: [220, 695, 925, 1400], punch: true,
+    trees: [
+      {x: 100, top: 600, home: 'you', b: [[1, 120, 110, 6], [1, 280, 100, 8], [-1, 360, 60, 4], [1, 460, 110, 6]]},
+      {x: 340, top: 700, b: [[-1, 210, 110, 6], [1, 190, 100, 8], [-1, 380, 110, 8], [1, 370, 100, 8], [1, 550, 100, 6]]},
+      {x: 580, top: 760, b: [[-1, 270, 110, 8], [1, 280, 100, 8], [-1, 470, 100, 8], [1, 470, 100, 8], [-1, 640, 90, 6]]},
+      {x: 810, top: 820, b: [[-1, 320, 100, 8], [1, 320, 100, 8], [-1, 520, 100, 8], [1, 520, 100, 8], [1, 700, 90, 6]]},
+      {x: 1040, top: 760, b: [[1, 270, 110, 8], [-1, 280, 100, 8], [1, 470, 100, 8], [-1, 470, 100, 8], [1, 640, 90, 6]]},
+      {x: 1280, top: 700, b: [[1, 210, 110, 6], [-1, 190, 100, 8], [1, 380, 110, 8], [-1, 370, 100, 8], [-1, 550, 100, 6]]},
+      {x: 1520, top: 600, home: 'ai', b: [[-1, 120, 110, 6], [-1, 280, 100, 8], [1, 360, 60, 4], [-1, 460, 110, 6]]},
+    ] },
+  { theme: 'harvest', W: 1700, H: 980,   // lots of golden acorns
+    ai: {speed: 0.84, think: [0.5, 0.95], mistake: 0.25},
+    nuts: {start: 11, drop: 22, every: 1.7}, mix: {acorn: 3, walnut: 4}, golden: 5, berries: 3,
+    mushrooms: [235, 480, 1220, 1465], punch: true,
+    trees: [
+      {x: 110, top: 610, home: 'you', b: [[1, 120, 115, 6], [1, 290, 105, 8], [-1, 370, 60, 4], [1, 470, 115, 6]]},
+      {x: 360, top: 720, b: [[-1, 220, 115, 6], [1, 200, 110, 8], [-1, 390, 115, 8], [1, 380, 110, 8], [1, 560, 105, 6]]},
+      {x: 610, top: 780, b: [[-1, 280, 115, 8], [1, 290, 110, 8], [-1, 480, 110, 8], [1, 480, 110, 8], [-1, 650, 95, 6]]},
+      {x: 850, top: 840, b: [[-1, 330, 110, 8], [1, 330, 110, 8], [-1, 530, 110, 8], [1, 530, 110, 8], [1, 710, 95, 6]]},
+      {x: 1090, top: 780, b: [[1, 280, 115, 8], [-1, 290, 110, 8], [1, 480, 110, 8], [-1, 480, 110, 8], [1, 650, 95, 6]]},
+      {x: 1340, top: 720, b: [[1, 220, 115, 6], [-1, 200, 110, 8], [1, 390, 115, 8], [-1, 380, 110, 8], [-1, 560, 105, 6]]},
+      {x: 1590, top: 610, home: 'ai', b: [[-1, 120, 115, 6], [-1, 290, 105, 8], [1, 370, 60, 4], [-1, 470, 115, 6]]},
+    ] },
+  { theme: 'dawn', W: 1900, H: 1000,   // the biggest wood of all
+    ai: {speed: 0.88, think: [0.45, 0.9], mistake: 0.22},
+    nuts: {start: 12, drop: 24, every: 1.6}, mix: {acorn: 4, walnut: 3}, golden: 4, berries: 4,
+    mushrooms: [218, 450, 1450, 1683], punch: true,
+    trees: [
+      {x: 100, top: 620, home: 'you', b: [[1, 120, 110, 6], [1, 290, 100, 8], [-1, 370, 60, 4], [1, 480, 110, 6]]},
+      {x: 335, top: 720, b: [[-1, 220, 110, 6], [1, 200, 100, 8], [-1, 390, 110, 8], [1, 380, 100, 8], [1, 570, 100, 6]]},
+      {x: 570, top: 790, b: [[-1, 280, 110, 8], [1, 290, 110, 8], [-1, 480, 100, 8], [1, 490, 110, 8], [-1, 660, 90, 6]]},
+      {x: 820, top: 850, b: [[-1, 330, 110, 8], [1, 330, 110, 8], [-1, 540, 100, 8], [1, 540, 110, 8], [1, 720, 90, 6]]},
+      {x: 1080, top: 850, b: [[1, 330, 110, 8], [-1, 330, 110, 8], [1, 540, 100, 8], [-1, 540, 110, 8], [-1, 720, 90, 6]]},
+      {x: 1330, top: 790, b: [[1, 280, 110, 8], [-1, 290, 110, 8], [1, 480, 100, 8], [-1, 490, 110, 8], [1, 660, 90, 6]]},
+      {x: 1565, top: 720, b: [[1, 220, 110, 6], [-1, 200, 100, 8], [1, 390, 110, 8], [-1, 380, 100, 8], [-1, 570, 100, 6]]},
+      {x: 1800, top: 620, home: 'ai', b: [[-1, 120, 110, 6], [-1, 290, 100, 8], [1, 370, 60, 4], [-1, 480, 110, 6]]},
     ] },
 ];
 // Each level is a season: sky, hills, tree kinds, leaves, ground, bushes, things on the floor and what drifts through the air.
@@ -299,6 +362,25 @@ THEMES.aurora = {...THEMES.winter, art: 'winter', aurora: true,
   bands: ['#080e2a', '#0e1838', '#142046', '#1c2a54', '#263660', '#32426c', '#404e76'], mtn: ['#2e3a62', '#263256', '#5a6890'], tint: ['#1c2c6a', 0.18],
   worldTint: ['#141e4a', 0.2], cloud: ['#343e6a', '#2a3360'],
   drift: {cols: ['#ffffff', '#e8f0ff'], n: 24, fall: 26, snow: true}};
+// fog: soft bands drift through the wood, behind the trees and low in front of them (drawn in code)
+THEMES.fog = {...THEMES.autumn, art: 'autumn', fog: ['#e4dcd6', '#d2cac6'], sun: '#fff4e0',
+  bands: ['#97a1b2', '#a6aebb', '#b4bac3', '#c2c4c9', '#cecdcb', '#d9d5cc', '#e3dccd'], mtn: ['#a8acb8', '#9ca0ae', '#c8ccd4'], tint: ['#d8d4d0', 0.32],
+  worldTint: ['#c8c2c4', 0.12], cloud: ['#ecebea', '#d4d0d2'],
+  drift: {cols: ['#f09030', '#e05030', '#f0d040'], n: 10, fall: 24}};
+// sunset: a big low sun, an orange glow over everything, dandelion fluff floating by
+THEMES.sunset = {...THEMES.birch, art: 'birch', sun: '#ffe2a0', sunR: 30, sunY: 260,
+  bands: ['#3c3a78', '#6a4888', '#a4549a', '#dc6a8a', '#f48c6c', '#f8b060', '#fcd480'], mtn: ['#7a5a8a', '#684a7a', '#c08aa0'], tint: ['#ff8040', 0.16],
+  worldTint: ['#ff6a30', 0.1], cloud: ['#ffc0a0', '#e88a90'], canopyShade: '#5a2030',
+  drift: {cols: ['#ffffff', '#fff0d8'], n: 14, fall: 6, fluff: true}};
+// harvest moon: a summer night under a huge orange moon, with fireflies
+THEMES.harvest = {...THEMES.night, moonTint: ['#ff9a3c', 0.45], moonScale: 2, sun: '#ffd090',
+  bands: ['#100c2a', '#1c1440', '#2a1c52', '#3a2660', '#4e306a', '#663a6e', '#80466c'], mtn: ['#3a2c50', '#30243f', '#5a4870'], tint: ['#402060', 0.25],
+  worldTint: ['#28145a', 0.3], cloud: ['#5a3e6e', '#46305e'], canopyShade: '#140a28'};
+// dawn: the sun coming up over the snow, everything pink and gold
+THEMES.dawn = {...THEMES.winter, art: 'winter', stars: false, sun: '#fff0c8', sunR: 26, sunY: 240,
+  bands: ['#2a3a78', '#4a4c90', '#7a5ca0', '#b06ca8', '#e080a0', '#f8a890', '#ffd0a0'], mtn: ['#7a6a9a', '#6a5a8a', '#e8c8d8'], tint: ['#ff90a0', 0.12],
+  worldTint: ['#ff8090', 0.07], cloud: ['#ffd0d8', '#e8a0b8'], canopyShade: '#3a2a5a',
+  drift: {cols: ['#ffffff', '#ffe8f0'], n: 20, fall: 22, snow: true}};
 
 /* ======== helpers ======== */
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -322,7 +404,7 @@ const store = {
 /* ======== pictures (PixelLab sprites in assets/) ======== */
 // Squirrel sheets: 80x80 cells, one row per animation, facing right. Grey is a recolour of red.
 const SHEET = {cell: 80, ax: 37, ay: 55, rows: {idle: [0, 8], run: [1, 6], jump: [2, 8], eat: [3, 7], climb: [4, 8], leap: [5, 8], spin: [6, 8], back: [7, 8],
-  climb1: [8, 9], groom: [9, 12], yawn: [10, 11], look: [11, 8]}};
+  climb1: [8, 9], groom: [9, 12], yawn: [10, 11], look: [11, 8], punch: [12, 9], knock: [13, 9], dizzy: [14, 9]}};
 const IDLE_TRICKS = ['groom', 'yawn', 'look', 'eat'];   // things a squirrel does now and then while it waits
 const IDLE_EVERY = [2.5, 5];   // seconds between them
 const IMG = {};
@@ -519,17 +601,40 @@ function layerFromImg(img, f, fallbackBase, haze, hazeAmt) {
   } catch (e) {}
   return {c, f, base};
 }
+// a long strip of soft fog that repeats sideways: solid in the thick middle, dithered at the wispy edges
+function fogStrip(R, cols) {
+  const W = 640, H = 80, c = makeCanvas(W, H), g = c.getContext('2d');
+  const blobs = Array.from({length: 16}, () => ({x: R() * W, y: 26 + R() * 28, rx: 50 + R() * 70, ry: 10 + R() * 14}));
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let d = 0;
+    for (const b of blobs) { const dx = Math.min(Math.abs(x - b.x), W - Math.abs(x - b.x)) / b.rx, dy = (y - b.y) / b.ry; d = Math.max(d, 1 - dx * dx - dy * dy); }
+    if (d > 0.5) g.fillStyle = cols[0]; else if (d > 0.2 && (x + y) % 2) g.fillStyle = cols[1]; else continue;
+    g.fillRect(x, y, 1, 1);
+  }
+  return c;
+}
+// a fog strip across the screen at a height in the world, sliding sideways at its own speed
+function drawFog(c, wy, f, v, alpha) {
+  const W = c.width, y = Math.round(wy - cy0 - c.height / 2);
+  if (y > vh || y + c.height < 0) return;
+  ctx.globalAlpha = alpha;
+  for (let x = -mod(Math.round(cx0 * f - time * v), W); x < vw; x += W) ctx.drawImage(c, x, y);
+  ctx.globalAlpha = 1;
+}
 const themeCache = {};
 function themeArt(name) {
   if (themeCache[name]) return themeCache[name];
   const S = THEMES[name], R = rng(9);
-  const sunR = 18, sun = makeCanvas(sunR * 2 + 10, sunR * 2 + 10), sg = sun.getContext('2d');
+  const sunR = S.sunR || 18, sun = makeCanvas(sunR * 2 + 10, sunR * 2 + 10), sg = sun.getContext('2d');
   for (let y = 0; y < sun.height; y++) for (let x = 0; x < sun.width; x++) {
     const d = Math.hypot(x - sun.width / 2, y - sun.height / 2);
     if (d < sunR) { sg.fillStyle = S.sun; sg.fillRect(x, y, 1, 1); } else if (d < sunR + 5 && (x + y) % 2) { sg.fillStyle = mix(S.sun, S.bands[3], .4); sg.fillRect(x, y, 1, 1); }
   }
-  if (S.stars && IMG.moon) {   // night: the PixelLab moon with a faint dithered glow round it
-    const m = IMG.moon, r = m.width / 2, c = makeCanvas(m.width + 14, m.height + 14), mg = c.getContext('2d'), glow = mix(S.sun, S.bands[2], .55);
+  if (S.stars && IMG.moon) {   // night: the PixelLab moon with a faint dithered glow round it (bigger and orange for a harvest moon)
+    const k = S.moonScale || 1, mw = IMG.moon.width * k, mh = IMG.moon.height * k, m = makeCanvas(mw, mh), mm = m.getContext('2d');
+    mm.imageSmoothingEnabled = false; mm.drawImage(IMG.moon, 0, 0, mw, mh);
+    if (S.moonTint) { mm.globalCompositeOperation = 'source-atop'; mm.globalAlpha = S.moonTint[1]; mm.fillStyle = S.moonTint[0]; mm.fillRect(0, 0, mw, mh); }
+    const r = mw / 2, c = makeCanvas(mw + 14, mh + 14), mg = c.getContext('2d'), glow = mix(S.sun, S.bands[2], .55);
     for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
       const d = Math.hypot(x + .5 - c.width / 2, y + .5 - c.height / 2);
       if (d > r - 1 && d < r + 6 && (x + y) % 2 && (d < r + 3 || (x * 3 + y) % 4 === 1)) { mg.fillStyle = glow; mg.fillRect(x, y, 1, 1); }
@@ -540,6 +645,7 @@ function themeArt(name) {
   const A = S.art || name;   // whose pictures these are
   const pl = (key, f, build, hz) => IMG[`bg-${A}-${key}`] ? layerFromImg(IMG[`bg-${A}-${key}`], f, build(S).base, horizon, hz) : build(S);
   return themeCache[name] = {S, layers: [pl('hills', 0.12, buildMountains, 0.1), pl('far', 0.28, buildFarForest, 0.32), pl('mid', 0.55, buildMidForest, 0.28)], fore: buildFore(S), sun,
+    fog: S.fog ? [1, 2, 3].map(k => fogStrip(rng(40 + k), S.fog)) : null,
     clouds: [80, 60, 104, 70].map((w, i) => ({spr: cloudSprite(R, w, S.stars, S.cloud), x: i * 300 + R() * 120, y: 260 + R() * 200, v: 3 + R() * 5}))};
 }
 
@@ -911,6 +1017,7 @@ function buildRoutes() {
       else if (Math.abs(p.x2 - t.cx) < 1) at.push(node(i, p.x2));
     });
     at.sort((a, b) => a.y - b.y);
+    t.stops = at;   // top to bottom: where branches (and the ground) meet this trunk
     for (let k = 0; k + 1 < at.length; k++) {
       LINKS.push({a: at[k], b: at[k + 1], kind: 'climb', trunk: t});
       LINKS.push({a: at[k + 1], b: at[k], kind: 'climb', trunk: t});
@@ -946,11 +1053,24 @@ function buildRoutes() {
   }
 }
 // Builds the graph with some extra points (where a squirrel stands, where nuts lie) added on their branches.
+// An extra point can also be partway up a trunk ({trunk, y}): it joins the trunk stops just above and below it.
 function graph(extra) {
   const nodes = NODES.slice();
-  const tn = extra.map(e => { const p = PLATS[e.p], x = clamp(e.x, p.x1, p.x2), n = {p: e.p, x, y: pY(p, x), id: nodes.length}; nodes.push(n); return n; });
+  const tn = extra.map(e => {
+    let n;
+    if (e.trunk) n = {p: -1, trunk: e.trunk, x: e.trunk.cx, y: clamp(e.y, e.trunk.stops[0].y, GROUND), id: nodes.length};
+    else { const p = PLATS[e.p], x = clamp(e.x, p.x1, p.x2); n = {p: e.p, x, y: pY(p, x), id: nodes.length}; }
+    nodes.push(n); return n;
+  });
   const adj = nodes.map(() => []);
-  const byPlat = PLATS.map(() => []); nodes.forEach(n => byPlat[n.p].push(n));
+  const climbTo = (a, b) => { const cost = Math.abs(b.y - a.y) / CLIMB; adj[a.id].push({to: b, cost, kind: 'climb', trunk: a.trunk || b.trunk}); adj[b.id].push({to: a, cost, kind: 'climb', trunk: a.trunk || b.trunk}); };
+  tn.forEach((n, i) => {
+    if (!n.trunk) return;
+    const st = n.trunk.stops, below = st.find(s => s.y >= n.y), above = st.slice().reverse().find(s => s.y <= n.y);
+    if (below) climbTo(n, below); if (above && above !== below) climbTo(n, above);
+    tn.slice(0, i).forEach(m => { if (m.trunk === n.trunk) climbTo(m, n); });   // two points on one trunk: straight up or down
+  });
+  const byPlat = PLATS.map(() => []); nodes.forEach(n => { if (n.p >= 0) byPlat[n.p].push(n); });
   for (const list of byPlat) {
     list.sort((a, b) => a.x - b.x);
     for (let k = 0; k + 1 < list.length; k++) {
@@ -994,6 +1114,8 @@ const LINES = {
   level5: 'Level five. It is winter. Look at the snow and the stars!',
   level6: 'Level six. It is night. Look at the fireflies!', level7: 'Level seven. It is raining. Look, a rainbow!',
   level8: 'Level eight. It is a cold night. Look at the lights in the sky!',
+  level9: 'Level nine. It is foggy. Can you see the trees?', level10: 'Level ten. The sun is going down. The sky is orange.',
+  level11: 'Level eleven. Look at the big orange moon!', level12: 'Level twelve. The sun is coming up. The snow is pink!',
   three: 'Three!', two: 'Two!', one: 'One!', go: 'Go!',
   tap: 'Tap where you want to go!',
   runYou: 'The red squirrel is running.', upYou: 'The red squirrel is climbing up the tree.', downYou: 'The red squirrel is climbing down the tree.',
@@ -1006,6 +1128,7 @@ const LINES = {
   berriesYou: 'The red squirrel is eating berries. Now it is fast!',
   upAi: 'The grey squirrel is climbing up the tree.', jumpAi: 'The grey squirrel is jumping.', acornAi1: 'The grey squirrel found an acorn.', acornAi2: 'The grey squirrel got an acorn.', acornAi3: 'The grey squirrel picked up an acorn.',
   berriesAi: 'The grey squirrel is eating berries. Now it is fast!',
+  punchAi: 'The grey squirrel punched the red squirrel!', dizzyYou: 'Oh no! The red squirrel fell down. It is dizzy!',
   treeOak: 'The red squirrel is climbing an oak tree.', treeBirch: 'The red squirrel is climbing a birch tree.',
   treeMaple: 'The red squirrel is climbing a maple tree.', treeFir: 'The red squirrel is climbing a fir tree.',
   treeBare: 'This tree has no leaves in winter. The red squirrel is climbing up.',
@@ -1234,6 +1357,10 @@ const SFX = {
   zoom: () => blip('sawtooth', 200, 1200, 0.35, 0.08),
   rustle: () => noise(0.25, 0.14, 1800),
   thud: () => noise(0.06, 0.12, 400),
+  punch: () => { noise(0.09, 0.35, 700); blip('square', 260, 90, 0.16, 0.18); },
+  whiff: () => noise(0.12, 0.08, 3200),
+  fall: () => blip('sine', 1100, 220, 0.7, 0.12),   // a slide whistle going down
+  dizzy: () => [1568, 1976, 1568, 1976, 1568].forEach((f, i) => blip('sine', f, f * 1.15, 0.08, 0.06, i * 0.22)),   // little birds tweeting
   count: hi => blip('square', hi ? 880 : 440, null, hi ? 0.35 : 0.15, 0.1),
   win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => blip('square', f, null, 0.2, 0.1, i * 0.12)),
   lose: () => [523, 440, 392, 523].forEach((f, i) => blip('triangle', f, null, 0.22, 0.14, i * 0.15)),
@@ -1297,7 +1424,8 @@ let prevCam = {x: 0, y: 0};
 
 function makeSquirrel(who, x) {
   return {who, p: GROUND_P, x, y: GROUND, face: who === 'you' ? 1 : -1, mul: who === 'ai' ? LV.ai.speed * AI_EASE : 1,
-    steps: [], cur: null, mode: 'idle', trail: [], trick: null, nextTrick: 2, anim: 0, score: 0, shown: 0, got: [], think: 1, goal: null, marker: null, scratch: 0, zoom: 0};
+    steps: [], cur: null, mode: 'idle', trail: [], trick: null, nextTrick: 2, anim: 0, score: 0, shown: 0, got: [], think: 1, goal: null, marker: null, scratch: 0, zoom: 0,
+    punch: null, punchCool: 6, chase: null, hurt: null, pending: null, cling: null};   // cling: the trunk it's hanging on partway up
 }
 function newGame(level) {
   loadLevel(level); buildSky();
@@ -1338,19 +1466,24 @@ function dropNut() {
 
 /* ======== moving along a route ======== */
 function plan(s, goals) {
-  // finish a leap or climb that's under way, then carry on from where it ends
-  const keep = s.cur && s.cur.kind !== 'walk' ? s.cur : null;
-  const from = keep ? {p: keep.b.p, x: keep.b.x} : {p: s.p, x: s.x};
+  // finish a leap that's under way, then carry on from where it lands; a climb can turn round where it is
+  const keep = s.cur && (s.cur.kind === 'jump' || s.cur.kind === 'bounce') ? s.cur : null;
+  const from = keep ? {p: keep.b.p, x: keep.b.x}
+    : s.cur && s.cur.kind === 'climb' ? {trunk: s.cur.trunk, y: s.y}
+    : s.cling ? {trunk: s.cling, y: s.y} : {p: s.p, x: s.x};
   const G = graph([from, ...goals]), D = dijkstra(G, G.tn[0]);
-  return {G, D, keep, goals: G.tn.slice(1)};
+  return {G, D, keep, from, goals: G.tn.slice(1)};
 }
-function follow(s, P, goalNode) { s.steps = routeTo(P.D, goalNode); s.cur = P.keep; }
+function follow(s, P, goalNode) {
+  s.steps = routeTo(P.D, goalNode); s.cur = P.keep;
+  s.cling = P.from.trunk || null;   // stopped partway up a trunk until the first step starts
+}
 function moveSquirrel(s, dt) {
   let budget = dt * s.mul * (s.zoom > 0 ? ZOOM : 1);
   while (budget > 1e-6) {
     if (!s.cur) {
-      if (!s.steps.length) { s.mode = 'idle'; return; }
-      s.cur = s.steps.shift(); s.cur.t = 0;
+      if (!s.steps.length) { s.mode = s.cling ? 'climb' : 'idle'; return; }   // partway up a trunk it hangs on there
+      s.cur = s.steps.shift(); s.cur.t = 0; s.cling = null;
       if (s.cur.kind === 'jump' || s.cur.kind === 'bounce') {
         s.cur.dur = s.cur.kind === 'jump' ? jumpDur(s.cur.a, s.cur.b) : bounceDur(s.cur.a, s.cur.b);
         if (s.cur.kind === 'jump') SFX.jump(); else { SFX.boing(); s.cur.mush.squash = 0.3; }
@@ -1370,7 +1503,7 @@ function moveSquirrel(s, dt) {
       const d = c.b.y - s.y, can = CLIMB * budget;
       s.anim += Math.min(Math.abs(d), can);
       s.scratch += Math.min(Math.abs(d), can); if (s.scratch > 16) { s.scratch = 0; if (s.who === 'you') SFX.scratch(); }
-      if (Math.abs(d) <= can) { budget -= Math.abs(d) / CLIMB; s.y = c.b.y; s.p = c.b.p; s.cur = null; }
+      if (Math.abs(d) <= can) { budget -= Math.abs(d) / CLIMB; s.y = c.b.y; if (c.b.p >= 0) s.p = c.b.p; else s.cling = c.trunk; s.cur = null; }
       else { s.y += Math.sign(d) * can; budget = 0; }
     } else {
       s.mode = 'jump';
@@ -1418,9 +1551,16 @@ function bestNutFor(s) {
 /* ======== the grey squirrel ======== */
 function aiThink(dt) {
   const s = ai;
+  if (s.punch) return;
+  if (s.chase) { chaseYou(dt); return; }
   if (s.goal && s.goal.state !== 'rest') { s.goal = null; s.steps = []; s.think = Math.min(s.think, 0.35); }
   if (s.goal) return;
   if ((s.think -= dt) > 0) return;
+  // punching levels: sometimes grey runs at you instead, when you're on a branch it can reach quickly
+  if (LV.punch && s.punchCool <= 0 && standingOnBranch(you) && Math.random() < PUNCH_CHASE) {
+    const P = plan(s, [{p: you.p, x: you.x}]);
+    if (P.D.dist[P.goals[0].id] < 3) { s.chase = {until: time + 4, next: 0.5}; follow(s, P, P.goals[0]); return; }
+  }
   const resting = nuts.filter(n => n.state === 'rest');
   if (!resting.length) return;
   const P = plan(s, resting.map(n => ({p: n.p, x: n.x})));
@@ -1430,16 +1570,69 @@ function aiThink(dt) {
   s.goal = choice.n; follow(s, P, choice.g);
 }
 
+/* ======== level 8 on: grey punches, you fall off and sit dizzy ======== */
+// on a branch, not mid-climb or mid-leap, and not already knocked off
+const standingOnBranch = s => !s.hurt && !PLATS[s.p].ground && (s.mode === 'idle' || s.mode === 'walk') && (!s.cur || s.cur.kind === 'walk');
+// grey heads for where you are now, for a few seconds; it gives up if you get away
+function chaseYou(dt) {
+  const s = ai;
+  if (time > s.chase.until || !standingOnBranch(you)) { s.chase = null; s.steps = []; s.cur = s.cur && s.cur.kind !== 'walk' ? s.cur : null; s.think = 0.3; return; }
+  if ((s.chase.next -= dt) > 0) return;
+  s.chase.next = 0.5;
+  const P = plan(s, [{p: you.p, x: you.x}]); follow(s, P, P.goals[0]);
+}
+function punchCheck(dt) {
+  const s = ai;
+  s.punchCool -= dt;
+  if (s.punch) {
+    const P = s.punch; P.t += dt;
+    if (!P.hit && P.t >= 2 / PUNCH_FPS) {   // the paw lands
+      P.hit = true;
+      if (standingOnBranch(you) && Math.abs(you.x - s.x) < PUNCH_REACH * 1.6) knockOff(you, s.face);
+      else SFX.whiff();
+    }
+    if (P.t >= SHEET.rows.punch[1] / PUNCH_FPS) {
+      s.punch = null; s.mode = 'idle'; s.punchCool = rand(...PUNCH_EVERY);
+      s.think = you.hurt ? rand(1, 1.6) / AI_EASE : 0.4; s.nextTrick = 0.2;   // pleased with itself, it does a little trick first
+    }
+    return;
+  }
+  if (s.punchCool > 0 || !standingOnBranch(s) || !standingOnBranch(you) || s.p !== you.p || Math.abs(s.x - you.x) > PUNCH_REACH) return;
+  s.punch = {t: 0, hit: false}; s.steps = []; s.cur = null; s.goal = null; s.chase = null; s.trick = null; s.mode = 'punch';
+  if (Math.abs(you.x - s.x) > 1) s.face = Math.sign(you.x - s.x);
+}
+function knockOff(s, dir) {
+  s.hurt = {t: 0, vx: dir * 70, vy: -170, down: 0};
+  s.steps = []; s.cur = null; s.cling = null; s.marker = null; s.pending = null; s.trick = null; s.mode = 'hurt'; s.face = -dir;   // flies backwards, facing the puncher
+  const x = s.x - dir * 10, y = s.y - 26;
+  sparkle(x, y, 16, '#ffe680'); parts.push({x, y, vx: 0, vy: 0, life: .25, g: 0, pow: true});
+  SFX.punch(); SFX.fall(); say('punchAi', 3);
+}
+function hurtUpdate(s, dt) {
+  const h = s.hurt; h.t += dt;
+  if (!h.down) {   // falls past every branch down to the ground
+    h.vy += 600 * dt; s.x = clamp(s.x + h.vx * dt, 12, WORLD_W - 12); s.y += h.vy * dt;
+    if (s.y >= GROUND && h.vy > 0) {
+      s.y = GROUND; s.p = GROUND_P; h.down = time;
+      puff(s.x, s.y, '#d8c89a', 8); SFX.thud(); SFX.dizzy(); say('dizzyYou', 2);
+    }
+  } else if (time - h.down > DIZZY_TIME) {
+    s.hurt = null; s.mode = 'idle';
+    if (s.pending) { const P = plan(s, [s.pending]); follow(s, P, P.goals[0]); s.marker = {x: P.goals[0].x, y: P.goals[0].y, t: time}; s.pending = null; }
+  }
+}
+
 /* ======== update ======== */
 function update(dt) {
   time += dt;
   if (phase === 'play') {
     if (deck.length && (dropTimer -= dt) <= 0) { dropNut(); dropTimer = LV.nuts.every; }
     aiThink(dt);
+    if (LV.punch) punchCheck(dt);
     if ((hintT -= dt) <= 0 || (hint && hint.state !== 'rest')) { hintT = 0.4; hint = bestNutFor(you); }
-    you.still = you.mode === 'idle' ? (you.still || 0) + dt : 0;
+    you.still = you.mode === 'idle' || (you.cling && !you.cur) ? (you.still || 0) + dt : 0;
     if (you.still > 7 && time - (you.nudged || 0) > 14 && nuts.some(n => n.state === 'rest')) { you.nudged = time; narrate('waitYou', 0.5); }
-    for (const s of squirrels) { moveSquirrel(s, dt); if (s.zoom > 0 && (s.zoom -= dt) <= 0) { document.getElementById(s.who === 'you' ? 'pillYou' : 'pillAi').classList.remove('zoom'); if (s === you) Music.speed(false); } }
+    for (const s of squirrels) { if (s.hurt) hurtUpdate(s, dt); else if (!s.punch) moveSquirrel(s, dt); if (s.zoom > 0 && (s.zoom -= dt) <= 0) { document.getElementById(s.who === 'you' ? 'pillYou' : 'pillAi').classList.remove('zoom'); if (s === you) Music.speed(false); } }
   }
   for (const n of nuts) if (n.state === 'fall') {
     n.vy += 500 * dt; n.y += n.vy * dt; n.ang += dt * 9;
@@ -1516,7 +1709,7 @@ let drift = [];
 function makeDrift() {
   const D = THEMES[LV.theme].drift;
   return Array.from({length: D.n}, (_, i) => ({x: Math.random() * 900, y: Math.random() * 500, ph: i * 1.7, col: D.cols[i % D.cols.length], fall: D.fall * (0.7 + Math.random() * 0.6),
-    snow: D.snow, rain: D.rain, glow: D.glow}));
+    snow: D.snow, rain: D.rain, glow: D.glow, fluff: D.fluff}));
 }
 function updateLeaves(dt) {
   const dx = (cam.x - prevCam.x) * 1.2, dy = (cam.y - prevCam.y) * 1.2;
@@ -1579,6 +1772,13 @@ function drawFrame(F, x, y, flip, rot) {
 }
 // Which frame a squirrel shows right now, and how it's turned.
 function squirrelPose(s) {
+  if (s.hurt) {   // knocked backwards onto its back while it falls, then sitting dizzy (frames 1-8, looped)
+    const n = SHEET.rows.knock[1];
+    if (!s.hurt.down) return {F: frame(s.who, 'knock', Math.min(n - 1, Math.floor(s.hurt.t * 16))), flip: s.face < 0, centre: true,
+      rot: -s.face * Math.min(0.9, s.hurt.t * 2.5)};   // tipping over backwards as it falls
+    return {F: frame(s.who, 'dizzy', 1 + Math.floor(time * 8) % (SHEET.rows.dizzy[1] - 1)), flip: s.face < 0, rot: Math.sin(time * 5) * 0.1};   // swaying on its feet
+  }
+  if (s.punch) return {F: frame(s.who, 'punch', Math.min(SHEET.rows.punch[1] - 1, Math.floor(s.punch.t * PUNCH_FPS))), flip: s.face < 0};
   if (s.zoom > 0 && (s.mode === 'walk' || s.mode === 'jump')) {   // curled up in a ball, rolling: the last 4 spin frames, turned a quarter more each round
     const k = Math.floor(time * 18);
     return {F: frame(s.who, 'spin', 4 + k % 4), centre: true, flip: s.face < 0, rot: (Math.floor(k / 4) % 4) * Math.PI / 2 * s.face};
@@ -1606,7 +1806,7 @@ function drawPose(pose, x, y) {
     const F = pose.F, h = SHEET.cell / 2; if (!F.img) return;
     ctx.save(); ctx.translate(x, y - 20); if (pose.rot) ctx.rotate(pose.rot); if (pose.flip) ctx.scale(-1, 1);
     ctx.drawImage(F.img, F.sx, F.sy, SHEET.cell, SHEET.cell, -h, -h, SHEET.cell, SHEET.cell); ctx.restore();
-  } else drawFrame(pose.F, x, y, pose.flip);
+  } else drawFrame(pose.F, x, y, pose.flip, pose.rot);
 }
 function drawSquirrel(s) {
   const x = Math.round(s.x - cx0), y = Math.round(s.y - cy0), pose = squirrelPose(s);
@@ -1629,7 +1829,16 @@ function drawSquirrel(s) {
     }
   }
   drawPose(pose, x, y);
+  if (s.hurt && s.hurt.down) {   // dizzy: three little stars circling over its head
+    const hx = x + DIZZY_HEAD[0] * (s.face < 0 ? -1 : 1), hy = y - DIZZY_HEAD[1];
+    for (let k = 0; k < 3; k++) {
+      const a = time * 5 + k * Math.PI * 2 / 3, sx = Math.round(hx + Math.cos(a) * 13), sy = Math.round(hy + Math.sin(a) * 4);
+      ctx.fillStyle = '#3b1a0c'; ctx.fillRect(sx - 3, sy - 1, 7, 3); ctx.fillRect(sx - 1, sy - 3, 3, 7);
+      ctx.fillStyle = k ? '#ffe680' : '#ffffff'; ctx.fillRect(sx - 2, sy, 5, 1); ctx.fillRect(sx, sy - 2, 1, 5);
+    }
+  }
 }
+const DIZZY_HEAD = [18, 42];   // where the dizzy stars circle, from the squirrel's feet (facing right)
 function drawMushroom(m) {
   const own = IMG['mushroom-bounce-' + season()], img = own || IMG['mushroom-bounce'];
   if (img) {   // squashes down when a squirrel bounces off it; sits a little into the ground on a soft shadow
@@ -1664,7 +1873,7 @@ function render() {
   const skyB = Math.round((FLOOR_TOP + 8 - camY0) - (cy0 - camY0) * 0.06);
   ctx.fillStyle = S.bands[0]; ctx.fillRect(0, 0, vw, vh);
   ctx.drawImage(skyC, 0, skyB - skyC.height);
-  ctx.drawImage(ART.sun, Math.round(vw * 0.82 - cx0 * 0.02), Math.max(skyB - (S.stars ? 380 : 440), SUN_TOP));   // never above the screen
+  ctx.drawImage(ART.sun, Math.round(vw * 0.82 - cx0 * 0.02), Math.max(skyB - (S.sunY || (S.stars ? 380 : 440)), SUN_TOP));   // never above the screen; sunY lower for sunset and dawn
   const period = vw + 300;
   for (const c of ART.clouds) ctx.drawImage(c.spr, Math.round(mod(c.x - cx0 * 0.08 + time * c.v, period) - 140), Math.round(skyB - c.y));
   drawLayer(ART.layers[0], GROUND - 60, camY0);
@@ -1672,7 +1881,9 @@ function render() {
   drawLayer(ART.layers[2], GROUND - 44, camY0);
   if (S.tint) { ctx.globalAlpha = S.tint[1]; ctx.fillStyle = S.tint[0]; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; }
   drawFloor();
+  if (ART.fog) drawFog(ART.fog[0], GROUND - 170, 0.5, 5, 0.6);   // behind the trees
   ctx.drawImage(WORLD, -cx0, -cy0);
+  if (ART.fog) { drawFog(ART.fog[1], GROUND - 360, 1, 9, 0.35); drawFog(ART.fog[2], GROUND - 24, 1, 13, 0.5); }   // drifting past the trees, under the squirrels
   MUSH.forEach(drawMushroom);
   // tap marker: a little bouncing ring where your squirrel is going
   if (you.marker) {
@@ -1701,11 +1912,13 @@ function render() {
   if (phase === 'play' && hx !== null && hx > -10 && hx < vw + 10 && hy > -10 && hy < vh + 10) drawArrow(hx, hy - 34 + bob);
   for (const p of parts) {
     ctx.fillStyle = p.col; const x = Math.round(p.x - cx0), y = Math.round(p.y - cy0), s = p.size || 1;
+    if (p.pow) { drawPow(x, y, 1 - p.life / .25); continue; }
     if (p.star && p.life > .25) { ctx.fillRect(x - 2, y, 5, 1); ctx.fillRect(x, y - 2, 1, 5); } else ctx.fillRect(x, y, s, s);
   }
   drawLayer(ART.fore, WORLD_H + 12, camY0);
   for (const l of drift) { ctx.fillStyle = l.col; const fl = Math.sin(time * 5 + l.ph) > 0, x = Math.round(l.x), y = Math.round(l.y);
     if (l.rain) { ctx.fillRect(x, y, 1, 3); ctx.fillRect(x - 1, y + 3, 1, 3); continue; }
+    if (l.fluff) { ctx.globalAlpha = .85; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); ctx.globalAlpha = 1; continue; }   // a dandelion seed
     if (l.glow) { const on = .5 + .5 * Math.sin(time * 2.6 + l.ph); ctx.globalAlpha = on * .4; ctx.fillRect(x - 1, y, 4, 2); ctx.fillRect(x, y - 1, 2, 4); ctx.globalAlpha = .4 + on * .6; ctx.fillRect(x, y, 2, 2); ctx.globalAlpha = 1; continue; }
     if (l.snow) ctx.fillRect(Math.round(l.x), Math.round(l.y), 2, 2); else ctx.fillRect(Math.round(l.x), Math.round(l.y), fl ? 4 : 2, fl ? 2 : 4); }
   // the hinted nut off screen: a yellow pointer at the edge showing the way
@@ -1724,6 +1937,17 @@ function render() {
     if (img) ctx.drawImage(img, Math.round(x - img.width / 2), Math.round(y - img.height / 2));
   }
   drawFaces();
+}
+// a comic-book burst where the punch lands, growing as it fades
+function drawPow(x, y, u) {
+  const r = 8 + u * 8;
+  ctx.globalAlpha = 1 - u * 0.6;
+  for (const [rr, col] of [[r + 2, '#3b1a0c'], [r, '#ffd84a'], [r * 0.5, '#ffffff']]) {
+    ctx.fillStyle = col; ctx.beginPath();
+    for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8, d = k % 2 ? rr * 0.5 : rr; ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d); }
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 function drawArrow(x, y) {
   ctx.fillStyle = '#3b1a0c'; ctx.fillRect(x - 6, y - 14, 12, 14); ctx.beginPath(); ctx.moveTo(x - 13, y - 1); ctx.lineTo(x + 13, y - 1); ctx.lineTo(x, y + 13); ctx.fill();
@@ -1806,10 +2030,17 @@ function tapAt(clientX, clientY) {
   if (!goal) {   // otherwise the nearest branch (or the ground), favouring the one under the finger
     bd = Infinity;
     PLATS.forEach((p, i) => { const x = clamp(wx, p.x1, p.x2), dy = wy - pY(p, x), d = Math.hypot(x - wx, dy < 0 ? dy * 0.6 : dy * 1.6); if (d < bd) { bd = d; goal = {p: i, x}; } });
+    // a tap on a trunk, between the ground and its top branch: climb to that height and hang on there
+    for (const t of TRUNKS) {
+      const dx = Math.abs(wx - t.cx);
+      if (dx < t.w / 2 + TAP_TRUNK && dx < bd && wy > t.stops[0].y - TAP_TRUNK && wy < GROUND - 14) { bd = dx; goal = {trunk: t, y: wy}; }
+    }
   }
+  tapped = true;
+  if (you.hurt) { you.pending = goal; SFX.tap(); return; }   // knocked off: it goes there once it's not dizzy any more
   const P = plan(you, [goal]); follow(you, P, P.goals[0]);
   you.marker = {x: P.goals[0].x, y: P.goals[0].y, t: time};
-  tapped = true; SFX.tap();
+  SFX.tap();
 }
 cvs.addEventListener('pointerdown', e => { audio(); tapAt(e.clientX, e.clientY); });
 addEventListener('contextmenu', e => e.preventDefault());

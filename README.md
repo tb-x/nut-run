@@ -10,6 +10,8 @@ bottom of the screen.
 - Pick a level (new ones unlock as you win), tap the green play button, then "Three, two, one, go!"
 - Tap anywhere and your squirrel goes there by itself: it runs along branches, climbs up trunks
   (and head-first down them) and leaps from branch to branch. Tap a nut to go straight for it.
+  Tap a trunk and it climbs to that spot and hangs on there; a new tap while it's climbing turns it
+  round straight away.
 - Touching a nut grabs it; it flies up to your score at the top.
 - Some nuts are in the trees at the start; more drop out of the treetops one by one.
 - Nuts:
@@ -26,6 +28,12 @@ bottom of the screen.
   or nibbles.
 - When every nut is gathered, the end card shows both piles side by side. Win (or tie) and the
   next level opens; lose and it's "Grey wins this time. Try again!"
+- From level 8 on, the grey squirrel plays rough: when it meets yours on a branch it punches it (a
+  quick one-two jab and a comic "pow" burst), and sometimes it runs at your squirrel on purpose.
+  Yours tumbles off the tree to the ground and sits dizzy for a moment, with stars going round its
+  head and little birds tweeting; then it gets up and carries on (a tap while it's dizzy is
+  remembered). The nuts you already have stay yours. Grey then waits at least 10 seconds before it
+  can punch again, and stops to look pleased with itself first, so the race stays winnable.
 - A friendly voice helps with learning English. It names the season and time of day, counts down,
   and says in simple sentences what the squirrels are doing: "The red squirrel is climbing up the
   tree.", "The grey squirrel is jumping.", "A nut is falling from the tree." It waits for a quiet
@@ -35,7 +43,7 @@ bottom of the screen.
   tune made in the browser plays instead. The speaker button (top right) turns all sound off and on and is
   remembered.
 
-### The five levels
+### The twelve levels
 
 | Level | Season | Trees | Nuts | New |
 | --- | --- | --- | --- | --- |
@@ -46,13 +54,21 @@ bottom of the screen.
 | 5 | winter evening: snow, fir trees, snow-covered trees, snowmen, stars, snowfall | 6 firs and snowy trees | 24 | three golden acorns, bouncy mushrooms that throw you up high |
 | 6 | summer night: moon, stars, fireflies, a darker forest | 5 oaks | 25 | more nuts, bouncy mushrooms in summer |
 | 7 | spring rain: grey sky, rain, a rainbow | 6 oaks | 27 | three golden acorns, a quicker grey squirrel |
-| 8 | winter night: northern lights, snow | 7 firs and snowy trees | 30 | the biggest wood, the fastest grey squirrel |
+| 8 | winter night: northern lights, snow | 7 firs and snowy trees | 30 | the fastest grey squirrel, who punches you off the branches (on every level from here on) |
+| 9 | foggy autumn morning: fog drifting through a grey-orange wood | 6 oaks and maples | 30 | two tall trees whose first branches are high up |
+| 10 | birch wood at sunset: a big low sun, an orange sky, dandelion fluff | 7 birches and oaks | 32 | four berries |
+| 11 | harvest moon: a summer night under a huge orange moon, fireflies | 7 oaks | 33 | five golden acorns, lots of walnuts |
+| 12 | snowy dawn: pink snow, the sun coming up | 8 firs and snowy trees | 36 | the biggest wood of all |
 
-Levels 6 to 8 reuse the pictures and music of summer, spring and winter (`art` in `THEMES`) with their own
-sky, light and weather: `worldTint` darkens the trees for the night, `rainbow` and `aurora` are drawn in
-code, and the fireflies and rain are drawn like the falling leaves.
+Levels 6 to 12 reuse the pictures and music of the five seasons (`art` in `THEMES`) with their own
+sky, light and weather: `worldTint` tints the trees (darker for the night, orange at sunset, pink at
+dawn), `rainbow`, `aurora` and `fog` are drawn in code, `sunR`, `sunY`, `moonScale` and `moonTint` make
+the big low sun and the harvest moon, and the fireflies, rain and dandelion fluff are drawn like the
+falling leaves.
 
-The grey squirrel gets a little quicker and smarter each level.
+The grey squirrel gets a little quicker and smarter each level up to level 8. From level 9 it's a bit
+slower again, because the punching already makes it harder: in test races, a player who waits a second
+before each tap and sometimes picks a worse nut won about half the races on levels 8 to 11 and more on 12.
 
 ## Running it
 
@@ -73,8 +89,11 @@ At the top of the script in `index.html`:
 | `ZOOM`, `ZOOM_TIME` | Berries: speed boost and how long it lasts |
 | `AI_AHEAD_SLOW` | How much longer grey dawdles when it's winning |
 | `AI_EASE` | Makes grey slower and more thoughtful on every level (lower = easier) |
+| `PUNCH_REACH`, `PUNCH_EVERY`, `PUNCH_CHASE` | Levels with punching: how close grey must be to punch you, the seconds it waits before it can punch again, and the chance it runs at you instead of a nut |
+| `PUNCH_FPS`, `DIZZY_TIME` | How fast the punch plays; how long your squirrel sits dizzy after falling |
 | `IDLE_TRICKS`, `IDLE_EVERY` | What a waiting squirrel does now and then, and how often |
 | `PICK_DIST`, `TAP_NUT` | How close a squirrel must get to grab a nut; how close a tap must be to target one |
+| `TAP_TRUNK` | How far beside a trunk a tap still counts as tapping the trunk |
 | `VOICE_VOL`, `SFX_VOL` | Loudness of the voice and the beeps (the voice is evened out and gently compressed, and the music dips under it) |
 | `NARRATE_GAP` | Seconds of quiet before the voice describes the next thing |
 | `MUSIC_VOL`, `MUSIC_DUCK` | Loudness of the music, and how far it dips under the voice |
@@ -86,7 +105,7 @@ At the top of the script in `index.html`:
 | `CANOPY_SPREAD`, `CANOPY_DROP`, `CANOPY_SHADE` | How the treetops are filled out: two darker copies of each crown behind it, this far to the sides, this far down, this much darker |
 | `THEMES` | Each season's colours: sky, clouds, hills, tree kinds, leaves, ground, bushes, decorations and what drifts in the air |
 | `NUT_TYPES` | Points per nut |
-| `LEVELS` | Per level: size, season, trees and branches, how many nuts and of which kinds, how often they drop, and the grey squirrel's `speed`, `think` (pause in seconds) and `mistake` (chance it picks a farther nut) |
+| `LEVELS` | Per level: size, season, trees and branches, how many nuts and of which kinds, how often they drop, and the grey squirrel's `speed`, `think` (pause in seconds) and `mistake` (chance it picks a farther nut); `punch: true` turns on the punching |
 
 Leaps between branch tips are worked out automatically from the trees, so a new level only needs
 trees and branches.
@@ -111,7 +130,12 @@ freely, with no attribution needed).
   reaching up (9; started from a from-behind pose made with `create_image_pixflux` and cut out of
   its bark background by a script), and three idle tricks: grooming (12, template "licking"),
   yawning (11, template) and sitting up to look around (8, custom).
-- `assets/squirrel-grey.png`: the same sheet recoloured to grey in a script (no extra generation).
+  On 2026-10-19 three more rows were added for the punching levels, 8 frames each, made with PixelLab's
+  `animate_image` from the squirrel's own side-view picture (custom character animations were
+  failing that day): a one-two punch, being knocked flat, and a dizzy wobble. The frames are in
+  `art-src/squirrel/`; `python art-src/squirrel-rows.py` (run from this folder) adds them to both sheets.
+- `assets/squirrel-grey.png`: the same sheet recoloured to grey in a script (no extra generation);
+  the three new rows take each colour's grey twin from the older rows.
 - `assets/nut-acorn.png`, `nut-walnut.png`, `nut-golden.png`, `nut-berries.png`: one
   `create_image_pixflux` image each, trimmed to the picture.
 - `assets/bush-spring.png` (blossom), `bush-summer.png` (red berries), `bush-birch.png` (fern),
@@ -188,12 +212,15 @@ speed 0.85, stability 0.6. Starter-plan audio may be used commercially; we credi
 The clips are here only as this game's own sounds: they are not licensed for anyone else to reuse,
 and they are not covered by any licence that may later be put on this game's code.
 
-`assets/say-*.mp3`, 44 clips:
+`assets/say-*.mp3`, 50 clips:
 - Levels: "Level one. It is spring. It is morning.", "Level two. It is summer. The sun is high.",
   "Level three. Look at the white trees.", "Level four. It is autumn. The leaves are orange.",
   "Level five. It is winter. Look at the snow and the stars!", "Level six. It is night. Look at the
   fireflies!", "Level seven. It is raining. Look, a rainbow!", "Level eight. It is a cold night. Look
-  at the lights in the sky!" (the last three on 2026-10-14 too, same plan and settings)
+  at the lights in the sky!" (the last three on 2026-10-14 too, same plan and settings), and on
+  2026-10-20 (same plan, voice and settings) "Level nine. It is foggy. Can you see the trees?", "Level
+  ten. The sun is going down. The sky is orange.", "Level eleven. Look at the big orange moon!" and
+  "Level twelve. The sun is coming up. The snow is pink!"
 - Countdown and help: "Three!", "Two!", "One!", "Go!", "Tap where you want to go!",
   "The red squirrel is waiting. Tap a nut!"
 - What the squirrels do: "The red squirrel is running.", "… is climbing up the tree.",
@@ -201,6 +228,8 @@ and they are not covered by any licence that may later be put on this game's cod
   "The red squirrel is eating berries. Now it is fast!", "The grey squirrel is climbing up the
   tree.", "… is jumping.", "The grey squirrel is eating berries. Now it is fast!",
   "A nut is falling from the tree.", "Look! A golden acorn is falling!"
+- For the punching levels (made on 2026-10-19, same plan, voice and settings): "The grey squirrel punched
+  the red squirrel!" and "Oh no! The red squirrel fell down. It is dizzy!"
 - Naming the tree, now and then when your squirrel starts climbing: "The red squirrel is climbing an
   oak tree." / "a birch tree." / "a maple tree." / "a fir tree.", and on the bare winter trees
   "This tree has no leaves in winter. The red squirrel is climbing up."
