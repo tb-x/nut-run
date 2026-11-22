@@ -130,6 +130,8 @@ const PUNCH_FPS = 12;          // punch animation speed; the paw lands on frame 
 const DIZZY_TIME = 2.5;        // seconds your squirrel sits dizzy on the ground after being knocked off
 const VOICE_VOL = 0.9;         // spoken lines (each clip is first evened out to the same level)
 const SFX_VOL = 0.45;          // synthesized effects
+const SFX_CLIP_VOL = 0.8;      // recorded effects (assets/sfx-*.mp3); they share the effects bus, so the voice ducks them too
+const ACORN_RATE_MAX = 2;      // the acorn clip rises in pitch with each nut in a row, up to this playback rate
 const MUSIC_VOL = 0.24;        // background music (an Eleven Music track per season)
 const MUSIC_DUCK = 0.22;       // music level (fraction) while the voice is talking, so the words come through
 const MUSIC_XFADE = 2;         // seconds of each track's end blended into its start, so the loop has no seam
@@ -1103,7 +1105,7 @@ function routeTo(D, goal) {
   return steps;
 }
 
-/* ======== sound: synthesized effects, recorded voice ======== */
+/* ======== sound: recorded effects and voice, synthesized fallbacks ======== */
 let AC = null, out = null, sfxBus = null, voiceBus = null, noiseBuf = null, muted = store.get('muted', false);
 const CLIPS = {};
 // Every spoken line; assets/say-<key>.mp3, or the device voice if a clip can't load.
@@ -1168,6 +1170,20 @@ function loadClips() {
         CLIPS[key] = {buf, gain: Math.min(4, 0.8 / peak)}; })
       .catch(() => { CLIPS[key] = null; });   // null = can't load: use the device voice
   }
+  for (const name of SFX_CLIPS) SFX_FILES[name]
+    .then(b => b && new Promise((ok, no) => AC.decodeAudioData(b, ok, no)))
+    .then(buf => { if (buf) SFX_BUF[name] = buf; }).catch(() => {});
+}
+// Recorded effects, assets/sfx-<name>.mp3. Each SFX entry plays its clip once decoded, otherwise its synthesized version.
+const SFX_CLIPS = ['acorn', 'walnut', 'golden', 'jump', 'boing', 'berry', 'punch', 'dizzy', 'fall', 'zoom', 'rustle', 'thud',
+  'grey-got', 'tap', 'win', 'tie', 'lose', 'all-done'];
+const SFX_FILES = {}, SFX_BUF = {};
+for (const name of SFX_CLIPS) SFX_FILES[name] = fetch(`assets/sfx-${name}.mp3?v=${ASSET_V}`).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null);
+function sfxClip(name, rate = 1) {   // true if the clip played; false means the caller synthesizes instead
+  const buf = SFX_BUF[name]; if (!AC || !buf) return false;
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = buf; s.playbackRate.value = rate; g.gain.value = SFX_CLIP_VOL / SFX_VOL;
+  s.connect(g).connect(sfxBus); s.start(); return true;
 }
 let talking = null, talkUntil = 0, talkPrio = 0;
 // prio: 1 = chatter (skipped if something is being said), 2 = news (waits its turn), 3 = must say now
@@ -1347,23 +1363,29 @@ function setMuted(m) {
 }
 const NOTES = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349];
 const SFX = {
-  tap: () => blip('sine', 700, 900, 0.06, 0.1),
-  jump: () => blip('square', 330, 660, 0.1, 0.06),
-  boing: () => { blip('sine', 150, 640, 0.18, 0.3); blip('sine', 640, 320, 0.2, 0.15, 0.17); },
+  tap: () => sfxClip('tap') || blip('sine', 700, 900, 0.06, 0.1),
+  jump: () => sfxClip('jump') || blip('square', 330, 660, 0.1, 0.06),
+  boing: () => { if (sfxClip('boing')) return; blip('sine', 150, 640, 0.18, 0.3); blip('sine', 640, 320, 0.2, 0.15, 0.17); },
   scratch: () => noise(0.03, 0.1, 2500),
-  got: k => { const f = NOTES[Math.min(k, NOTES.length - 1)]; blip('triangle', f, null, 0.25, 0.25); blip('sine', f * 2, null, 0.18, 0.1, 0.05); },
-  golden: () => [1047, 1319, 1568, 2093].forEach((f, i) => blip('triangle', f, null, 0.2, 0.2, i * 0.07)),
-  greyGot: () => blip('triangle', 330, 262, 0.18, 0.14),
-  zoom: () => blip('sawtooth', 200, 1200, 0.35, 0.08),
-  rustle: () => noise(0.25, 0.14, 1800),
-  thud: () => noise(0.06, 0.12, 400),
-  punch: () => { noise(0.09, 0.35, 700); blip('square', 260, 90, 0.16, 0.18); },
-  whiff: () => noise(0.12, 0.08, 3200),
-  fall: () => blip('sine', 1100, 220, 0.7, 0.12),   // a slide whistle going down
-  dizzy: () => [1568, 1976, 1568, 1976, 1568].forEach((f, i) => blip('sine', f, f * 1.15, 0.08, 0.06, i * 0.22)),   // little birds tweeting
+  got: k => {   // an acorn: the pitch climbs with the nuts in a row
+    const f = NOTES[Math.min(k, NOTES.length - 1)];
+    if (sfxClip('acorn', Math.min(ACORN_RATE_MAX, f / NOTES[0]))) return;
+    blip('triangle', f, null, 0.25, 0.25); blip('sine', f * 2, null, 0.18, 0.1, 0.05);
+  },
+  walnut: k => sfxClip('walnut') || SFX.got(k),
+  golden: () => sfxClip('golden') || [1047, 1319, 1568, 2093].forEach((f, i) => blip('triangle', f, null, 0.2, 0.2, i * 0.07)),
+  greyGot: () => sfxClip('grey-got') || blip('triangle', 330, 262, 0.18, 0.14),
+  zoom: () => sfxClip('berry') || blip('sawtooth', 200, 1200, 0.35, 0.08),   // berries: the speed-up
+  rustle: () => sfxClip('rustle') || noise(0.25, 0.14, 1800),
+  thud: () => sfxClip('thud') || noise(0.06, 0.12, 400),
+  punch: () => { if (sfxClip('punch')) return; noise(0.09, 0.35, 700); blip('square', 260, 90, 0.16, 0.18); },
+  whiff: () => sfxClip('zoom') || noise(0.12, 0.08, 3200),   // a missed punch
+  fall: () => sfxClip('fall') || blip('sine', 1100, 220, 0.7, 0.12),   // a slide whistle going down
+  dizzy: () => sfxClip('dizzy') || [1568, 1976, 1568, 1976, 1568].forEach((f, i) => blip('sine', f, f * 1.15, 0.08, 0.06, i * 0.22)),   // little birds tweeting
   count: hi => blip('square', hi ? 880 : 440, null, hi ? 0.35 : 0.15, 0.1),
   win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => blip('square', f, null, 0.2, 0.1, i * 0.12)),
   lose: () => [523, 440, 392, 523].forEach((f, i) => blip('triangle', f, null, 0.22, 0.14, i * 0.15)),
+  end: kind => sfxClip(kind) || (kind === 'lose' ? SFX.lose() : SFX.win()),   // the race result: win, tie, lose or all-done
 };
 
 /* ======== canvas and scaling ======== */
@@ -1674,7 +1696,7 @@ function grab(s, n) {
   if (s.who === 'you') {
     grabs++;
     if (n.type === 'golden') { SFX.golden(); say('goldenYou', 3); }
-    else if (n.type === 'walnut') { SFX.got(s.score - 1); say(pick(['walnutYou1', 'walnutYou2']), 2); }
+    else if (n.type === 'walnut') { SFX.walnut(s.score - 1); say(pick(['walnutYou1', 'walnutYou2']), 2); }
     else if (n.type === 'berries') say('berriesYou', 3);
     else { SFX.got(Math.min(s.score - 1, 11)); narrate('acornYou' + (1 + (grabs % 4)), 0.6); }   // takes turns with the verbs
   } else {
@@ -2005,7 +2027,7 @@ function showEnd() {
   const youWin = you.score > ai.score, tie = you.score === ai.score, last = LEVEL === LEVELS.length - 1;
   if (youWin || tie) store.set('unlocked', Math.max(store.get('unlocked', 0), Math.min(LEVEL + 1, LEVELS.length - 1)));
   document.getElementById('endTitle').textContent = tie ? "It's a tie!" : youWin ? (last ? 'You won every level!' : 'You win!') : 'Grey wins this time!';
-  (youWin || tie ? SFX.win : SFX.lose)();
+  SFX.end(tie ? 'tie' : youWin ? (last ? 'all-done' : 'win') : 'lose');
   setTimeout(() => say(tie ? 'tie' : youWin ? (last ? 'allDone' : 'win') : 'lose', 3), 400);
   for (const [s, id] of [[you, 'rowYou'], [ai, 'rowAi']]) {
     const row = document.getElementById(id); row.innerHTML = '';

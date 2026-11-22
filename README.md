@@ -40,7 +40,10 @@ bottom of the screen.
   moment before describing the next thing, so it doesn't talk all the time.
 - Each season has its own cheerful music (Eleven Music), looping without a seam. It dips while the
   voice talks and plays a little faster during a speed boost. If a track can't load, a bouncy 8-bit
-  tune made in the browser plays instead. The speaker button (top right) turns all sound off and on and is
+  tune made in the browser plays instead. The sound effects are short recordings too (pops for nuts that climb
+  in pitch with each acorn in a row, a boing, a bonk and a slide whistle, a jingle for a win, a tie, a loss and the
+  last level), with the old browser-made beeps as a fallback; the claw scratches and the countdown beeps are still
+  made in the browser. The speaker button (top right) turns all sound off and on and is
   remembered.
 
 ### The twelve levels
@@ -95,6 +98,8 @@ At the top of the script in `index.html`:
 | `PICK_DIST`, `TAP_NUT` | How close a squirrel must get to grab a nut; how close a tap must be to target one |
 | `TAP_TRUNK` | How far beside a trunk a tap still counts as tapping the trunk |
 | `VOICE_VOL`, `SFX_VOL` | Loudness of the voice and the beeps (the voice is evened out and gently compressed, and the music dips under it) |
+| `SFX_CLIP_VOL` | Loudness of the recorded sound effects (they dip under the voice like the beeps) |
+| `ACORN_RATE_MAX` | The acorn pop climbs in pitch with each acorn in a row, up to this playback speed (2 = an octave up) |
 | `NARRATE_GAP` | Seconds of quiet before the voice describes the next thing |
 | `MUSIC_VOL`, `MUSIC_DUCK` | Loudness of the music, and how far it dips under the voice |
 | `MUSIC_XFADE`, `MUSIC_ZOOM` | Seconds blended so each track loops smoothly; how much faster it plays during a boost |
@@ -114,7 +119,7 @@ trees and branches.
 
 Pictures: made with [PixelLab](https://pixellab.ai) (the squirrels, nuts, trees, bushes, mushrooms, backgrounds and
 moon). Voices: [elevenlabs.io](https://elevenlabs.io). Music: Eleven Music. The sky, ground and effects are drawn
-in code; the beeps are made in the browser.
+in code; the sound effects are recordings (see below), and the few beeps left are made in the browser.
 
 ### Picture credits
 
@@ -238,6 +243,17 @@ and they are not covered by any licence that may later be put on this game's cod
   walnut.", "Wow! The red squirrel found a golden acorn!", "The grey squirrel found / got / picked
   up an acorn."
 - The end: "You win!", "It's a tie!", "Grey wins this time. Try again!", "You won every level! Hooray!"
+
+Sound effects, `assets/sfx-*.mp3`, 18 clips: all made on **2026-11-22** with ElevenLabs Sound Effects
+(`eleven_text_to_sound_v2`) on the ElevenLabs **Creator** plan (paid), from short text descriptions. Like the voice
+clips, they are only this game's own sounds and not licensed for reuse.
+- Nuts: `sfx-acorn` (a soft pop and wooden plink), `sfx-walnut` (a wooden thunk and plink), `sfx-golden` (a rising
+  twinkle), `sfx-berry` (a crunch and sparkle for the speed-up), `sfx-grey-got` (grey's muted pop)
+- Moving: `sfx-jump` (a springy whoosh), `sfx-boing` (a mushroom bounce), `sfx-rustle` (leaves as a nut falls),
+  `sfx-thud` (a nut landing on a branch), `sfx-tap` (a bubble click for a tap)
+- Punching: `sfx-punch` (a pillow-soft bonk), `sfx-zoom` (a whoosh for a missed punch), `sfx-fall` (a slide whistle
+  down and a soft thud), `sfx-dizzy` (birds tweeting)
+- The end: `sfx-win`, `sfx-tie`, `sfx-lose` and `sfx-all-done` (short jingles under the spoken result)
 
 ### Music credits
 
